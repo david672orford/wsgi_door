@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>Log in using...</title>
+</head>
+<body>
+<h1>Log in using...</h1>
+<ul>
+{% for provider in providers %}
+<li><a href="{{provider}}">{{provider}}</a></li>
+{% endfor %}
+</ul>
+</body>
+</html>
