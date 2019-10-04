@@ -4,6 +4,7 @@ import urllib.error
 import json
 import jwt
 from secrets import token_hex
+import gzip
 
 # Base class for providers which still use OAuth version 1
 # We use Oauthlib to sign the requests.
@@ -25,7 +26,6 @@ class AuthProviderOAuth1Base(object):
 			callback_uri = redirect_uri,
 			)
 		uri, headers, body = client.sign(self.request_token_url, http_method="POST")
-		print(headers)
 		try:
 			response = urlopen(Request(uri, headers=headers), data=b"")
 		except urllib.error.HTTPError as e:
@@ -80,6 +80,7 @@ class AuthProviderOAuth2Base(object):
 	scope = None
 
 	def __init__(self, keys):
+		self.keys = keys
 		self.client_id = keys['client_id']
 		self.client_secret = keys['client_secret']
 
@@ -93,7 +94,7 @@ class AuthProviderOAuth2Base(object):
 			response_type = 'code',
 			state = state,
 			scope = self.scope,
-			prompt = 'select_account',
+			#prompt = 'select_account',
 			)
 		return '{authorize_url}?{query}'.format(authorize_url=self.authorize_url, query=urlencode(query))
 
@@ -120,17 +121,24 @@ class AuthProviderOAuth2Base(object):
 			grant_type = 'authorization_code',
 			)
 		try:
+			# FIXME: can we use JSON instead of form encoding?
 			response = urlopen(
-				Request(self.access_token_url, headers={'Accept':'application/json'}),
+				Request(self.access_token_url, headers={
+					'Content-Type':'application/x-www-form-urlencoded',
+					'Accept':'application/json',
+					}),
 				data=urlencode(form).encode('utf-8')
 				)	
 		except urllib.error.HTTPError as e:
 			return dict(error="bad_response", error_description="HTTP request failed: %s %s" % (e.code, e.reason))
 			
 		content_type = response.info().get_content_type()
-		if content_type != 'application/json':
+		if content_type == 'application/json':
+			access_token = json.load(response)
+		elif content_type == 'text/plain':		# stackexchange
+			access_token = dict(parse_qsl(response.read().decode('utf-8')))
+		else:
 			return dict(error="bad_response", error_description="Content-Type (%s) not supported." % content_type)
-		access_token = json.load(response)
 
 		if 'id_token' in access_token:
 			# FIXME: verify token
@@ -139,15 +147,29 @@ class AuthProviderOAuth2Base(object):
 
 		return access_token
 
+	def get_json(self, url, access_token_dict, **kwargs):
+		if len(kwargs.keys()):
+			url = url + "?" + urlencode(kwargs)
+		response = urlopen(
+			Request(url,
+	           	headers={
+					'Authorization': 'Bearer ' + access_token_dict['access_token'],
+					'Accept':'application/json',
+					}
+				)
+			)
+		content_type = response.info().get_content_type()
+		assert content_type == "application/json", content_type
+		if response.getheader('Content-Encoding','') == 'gzip':
+			response = gzip.GzipFile(fileobj=response)
+		return json.load(response)
+
 	# Send a request to the provider's url for retrieving the user's profile.
 	def get_profile(self, access_token):
-		if self.profile_url is not None:
-			response = urlopen(
-				Request(self.profile_url,
-	            headers={'Authorization': 'Bearer ' + access_token['access_token']}
-				))
-			return json.load(response)
-		return None
+		assert self.profile_url is not None
+		profile = self.get_json(self.profile_url, access_token)
+		print("profile:", json.dumps(profile, indent=4, sort_keys=True))
+		return profile
 
 	# Extract standard user profile information from the information included
 	# with the access token. If it is not enough, call .get_profile().
@@ -162,10 +184,14 @@ class AuthProviderGoogle(AuthProviderOAuth2Base):
 	scope = 'openid profile email'
 	profile_url = 'https://www.googleapis.com/oauth2/v1/userinfo?alt=json'
 	def get_normalized_profile(self, access_token):
-		id_token = access_token.get('id_token',{})
-		if id_token.get('email_verified') is True:
-			return dict(remote_user=id_token['email'])
-		return dict()
+		id_token = access_token['id_token']
+		profile = self.get_profile(access_token)
+		return dict(
+			remote_user = "google:" + id_token['sub'],
+			name = profile['name'],
+			picture = profile['picture'],
+			email = id_token['email'],
+			)
 
 # https:/developers.facebook.com
 class AuthProviderFacebook(AuthProviderOAuth2Base):
@@ -175,9 +201,10 @@ class AuthProviderFacebook(AuthProviderOAuth2Base):
 	profile_url = 'https://graph.facebook.com/v1.0/me'
 	def get_normalized_profile(self, access_token):
 		profile = self.get_profile(access_token)
-		if 'name' in profile:
-			return dict(remote_user="%s@facebook" % profile['name'])
-		return dict()
+		return dict(
+			remote_user = 'facebook:' + profile['id'],
+			name = profile['name'],
+			)
 
 # https://developer.twitter.com/en/apps
 class AuthProviderTwitter(AuthProviderOAuth1Base):
@@ -188,8 +215,11 @@ class AuthProviderTwitter(AuthProviderOAuth1Base):
 	profile_url = 'https://api.twitter.com/1.1/users/show.json?user_id={user_id}'
 	def get_normalized_profile(self, access_token):
 		profile = self.get_profile(access_token)
-		print("profile:", profile)
-		return dict(remote_user="%s@twitter" % access_token['screen_name'])
+		return dict(
+			remote_user='twitter:' + access_token['user_id'],
+			name = access_token['screen_name'],
+			picture = profile['profile_image_url_https'],
+			)
 
 # https://github.com/settings/apps
 class AuthProviderGitHub(AuthProviderOAuth2Base):
@@ -199,9 +229,11 @@ class AuthProviderGitHub(AuthProviderOAuth2Base):
 	profile_url = 'https://api.github.com/user'
 	def get_normalized_profile(self, access_token):
 		profile = self.get_profile(access_token)
-		if 'login' in profile:
-			return dict(remote_user="%s@github.com" % profile['login'])
-		return dict()
+		return dict(
+			remote_user = 'github:' + profile['login'],
+			name = profile['name'],
+			picture = profile['avatar_url']
+			)
 
 # https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade
 class AuthProviderAzure(AuthProviderOAuth2Base):
@@ -211,9 +243,12 @@ class AuthProviderAzure(AuthProviderOAuth2Base):
 	profile_url = 'https://graph.microsoft.com/v1.0/me'
 	def get_normalized_profile(self, access_token):
 		id_token = access_token.get('id_token',{})
-		if 'email' in id_token:
-			return dict(remote_user=id_token.get('email'))
-		return dict()
+		profile = self.get_profile(access_token)
+		return dict(
+			remote_user = 'azure:' + profile['userPrincipalName'],
+			name = profile['displayName'],
+			email = id_token['email'],
+			)
 
 # https://www.linkedin.com/developers/apps/
 class AuthProviderLinkedin(AuthProviderOAuth2Base):
@@ -229,8 +264,11 @@ class AuthProviderPinterest(AuthProviderOAuth2Base):
 	scope = 'read_public'
 	def get_normalized_profile(self, access_token):
 		profile = self.get_profile(access_token)
-		print("profile:", profile)
-		return dict()
+		profile = profile['data']
+		return dict(
+			remote_user = 'pinterest:' + profile['id'],
+			name = '%s %s' % (profile['first_name'], profile['last_name']),
+			)
 
 # https://developer.wordpress.com/apps/
 class AuthProviderWordpress(AuthProviderOAuth2Base):
@@ -240,8 +278,31 @@ class AuthProviderWordpress(AuthProviderOAuth2Base):
 	scope = 'auth'
 	def get_normalized_profile(self, access_token):
 		profile = self.get_profile(access_token)
-		print("profile:", profile)
-		return dict()
+		return dict(
+			remote_user = 'wordpress:' + str(profile['ID']),
+			name = profile['display_name'],
+			email = profile['email'],
+			picture = profile['avatar_URL'],
+			)
+
+# https://stackapps.com/apps/oauth/
+class AuthProviderStackexchange(AuthProviderOAuth2Base):
+	authorize_url = 'https://stackoverflow.com/oauth'
+	access_token_url = 'https://stackoverflow.com/oauth/access_token'
+	profile_url = 'https://api.stackexchange.com/2.2/me'
+	scope = ''
+	def get_profile(self, access_token):
+		profile = self.get_json(self.profile_url, access_token, site='stackoverflow', key=self.keys['request_key'], access_token=access_token['access_token'])
+		print("profile:", json.dumps(profile, indent=4, sort_keys=True))
+		return profile
+	def get_normalized_profile(self, access_token):
+		profile = self.get_profile(access_token)
+		profile = profile['items'][0]
+		return dict(
+			remote_user = 'stackexchange:' + str(profile['user_id']),
+			name = profile['display_name'],
+			picture = profile['profile_image'],
+			)
 
 available_auth_providers = {
 	'google': AuthProviderGoogle,
@@ -252,5 +313,6 @@ available_auth_providers = {
 	#'linkedin': AuthProviderLinkedin,
 	'pinterest': AuthProviderPinterest,
 	'wordpress': AuthProviderWordpress,
+	'stackexchange': AuthProviderStackexchange,
 	}
 
