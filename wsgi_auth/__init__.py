@@ -48,7 +48,7 @@ class AuthProviderOAuth2Base(object):
 	# an OpenID Connect assertion (id_token) encoded in JWT format.
 	# If we know the proper URL for this provider, ask for the user's
 	# profile information too.
-	def request_access_token(self, request, session, redirect_uri):
+	def get_access_token(self, request, session, redirect_uri):
 		if not 'state' in session:
 			return dict(error="spurious_response", error_description="Browser was not expected to visit the redirect_uri.")
 		if request.args.get('state') != session['state']:
@@ -76,43 +76,73 @@ class AuthProviderOAuth2Base(object):
 		access_token = json.load(response)
 
 		if 'id_token' in access_token:
-			access_token['id_token'] = jwt.decode(access_token['id_token'], verify=False)
+			# FIXME: verify token
+			id_token = jwt.decode(access_token['id_token'], verify=False)
+			access_token['id_token'] = id_token
 
-		if 'access_token' in access_token and self.profile_url is not None:
+		return access_token
+
+	def get_profile(self, access_token):
+		if self.profile_url is not None:
 			response = urllib.request.urlopen(
 				urllib.request.Request(self.profile_url,
 	            headers={'Authorization': 'Bearer ' + access_token['access_token']}
 				))
-			access_token['profile'] = json.load(response)
+			return json.load(response)
+		return None
 
-		return access_token
+	def get_normalized_profile(self, access_token):
+		return dict()
 
 class AuthProviderGoogle(AuthProviderOAuth2Base):
 	authorize_url = 'https://accounts.google.com/o/oauth2/auth'
 	access_token_url = 'https://accounts.google.com/o/oauth2/token'
 	request_token_params = { 'scope': 'openid profile email' }
 	profile_url = 'https://www.googleapis.com/oauth2/v1/userinfo?alt=json'
+	def get_normalized_profile(self, access_token):
+		id_token = access_token.get('id_token',{})
+		if id_token.get('email_verified') is True:
+			return dict(remote_user=id_token['email'])
+		return dict()
 
 class AuthProviderFacebook(AuthProviderOAuth2Base):
 	authorize_url = 'https://www.facebook.com/dialog/oauth'
 	access_token_url = 'https://graph.facebook.com/oauth/access_token'
 	request_token_params = { 'scope': 'email' }
 	profile_url = 'https://graph.facebook.com/v1.0/me'
+	def get_normalized_profile(self, access_token):
+		profile = self.get_profile(access_token)
+		if 'name' in profile:
+			return dict(remote_user="%s@facebook.com" % profile['name'])
+		return dict()
 
 class AuthProviderTwitter(AuthProviderOAuth1Base):
 	authorize_url = 'https://api.twitter.com/oauth/authenticate'
 	access_token_url = 'https://api.twitter.com/oauth/access_token'
+	def get_normalized_profile(self, access_token):
+		return dict()
 
 class AuthProviderGitHub(AuthProviderOAuth2Base):
 	authorize_url = 'https://github.com/login/oauth/authorize'
 	access_token_url = 'https://github.com/login/oauth/access_token'
 	request_token_params = { 'scope': 'openid email' }
 	profile_url = 'https://api.github.com/user'
+	def get_normalized_profile(self, access_token):
+		profile = self.get_profile(access_token)
+		if 'login' in profile:
+			return dict(remote_user="%s@github.com" % profile['login'])
+		return dict()
 
 class AuthProviderAzure(AuthProviderOAuth2Base):
 	authorize_url = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize'
 	access_token_url = 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
 	request_token_params = { 'scope': 'openid email' }
+	profile_url = 'https://graph.microsoft.com/v1.0/me'
+	def get_normalized_profile(self, access_token):
+		id_token = access_token.get('id_token',{})
+		if 'email' in id_token:
+			return dict(remote_user=id_token.get('email'))
+		return dict()
 
 available_auth_providers = {
 	'google': AuthProviderGoogle,
@@ -133,6 +163,7 @@ class WSGIAuthMiddleware(object):
 
 		self.cookie_name = cookie_name
 		self.secret = secret
+		self.protected_paths = protected_paths
 
 		# Initialize those authentication providers for which client keys have been provided.
 		self.auth_providers = {}
@@ -164,42 +195,42 @@ class WSGIAuthMiddleware(object):
 			provider_name = provider_name,
 			)
 
-	# Generate a URL to describe an error
-	def error_url(self, request, provider_name, error, error_description):
-		return "{scheme}://{host}/auth/failure/{provider_name}?{query}".format(
-			scheme = request.scheme,
-			host = request.host,
-			provider_name = provider_name,
-			query = urlencode(dict(error=error, error_description=error_description))
-			)
-
 	# Handle an WSGI request
 	# We peel off requests to authentication pages and pass other requests
 	# through to the wrapped WSGI application.
 	def __call__(self, environ, start_response):
 		request = Request(environ)
 		session = JSONSecureCookie.load_cookie(request, self.cookie_name, self.secret)
+
+		# Try to dispatch to one of our handler functions
 		adapter = self.url_map.bind_to_environ(request.environ)
+		response = None
 		try:
 			endpoint, values = adapter.match()
 			response = getattr(self, endpoint)(request, session, **values)
+		except NotFound:
+			# No match, path presumably belongs to the wrapped WSGI app.
+			if 'remote_user' in session:		# logged in
+				environ['AUTH_TYPE'] = "OAuth %s" % session['provider']
+				environ['REMOTE_USER'] = session['remote_user']
+			else:								# not logged in, do we need to be?
+				for protected_path in self.protected_paths:
+					if request.path.startswith(protected_path):
+						session['next'] = request.path
+						response = redirect('/auth/login/')
+				# fall thru
+
+		# If this is our page or we need to throw a redirect,
+		if response is not None:
 			session.save_cookie(response, key=self.cookie_name, httponly=True, secure=True)
 			return response(environ, start_response)
-		except NotFound:
-			pass
 
-		if 'REMOTE_USER' in session:
-			environ['REMOTE_USER'] = session['REMOTE_USER']
-		else:
-			for protected_path in self.protected_paths:
-				if request.path.startswtih(protected_path):
-					session.clear()
-					session['next'] = request.path
-					return redirect('/auth/login')(environ, start_response)
-					
+		# If we reach this point, we really are going to pass it thru.
+		environ['wsgi_auth_session'] = session
 		return self.app(environ, start_response)
 
-	# The user has asked for a list of the available login providers
+	# The user has asked for a list of the available login providers.
+	# Render from an Jinja2 template.
 	def on_login_index(self, request, session):
 		return self.render_template("login.html", providers=self.auth_providers.keys())
 
@@ -210,29 +241,40 @@ class WSGIAuthMiddleware(object):
 		if provider is not None:
 			callback_url = self.callback_url(request, provider_name)
 			return redirect(provider.make_authorize_url(session, callback_url))
+		raise NotFound()
 
 	# Browser has returned from the provider's login page.
 	def on_authorized(self, request, session, provider_name):
 		provider = self.auth_providers.get(provider_name)
 		if provider is not None:
 			callback_url = self.callback_url(request, provider_name)
-			access_token = provider.request_access_token(request, session, callback_url)
-			if 'error' in access_token:
-				return redirect(self.error_url(provider_name, error, error_description))
-			print(json.dumps(access_token, indent=4, ensure_ascii=False))
-			session['provider'] = provider_name
-			session.update(access_token)
-		next_url = session.pop('next', '/auth/status')
-		return redirect(next_url)
+			access_token = provider.get_access_token(request, session, callback_url)
+			print("access_token:", json.dumps(access_token, indent=4, ensure_ascii=False))
 
-	# Display the status of the user's login session
+			if 'error' in access_token:
+				error_url = "{scheme}://{host}/auth/error/{provider_name}?{query}".format(
+					scheme = request.scheme,
+					host = request.host,
+					provider_name = provider_name,
+					query = urlencode(dict(error=access_token.get('error'), error_description=access_token.get('error_description')))
+					)
+				return redirect(error_url)
+
+			next_url = session.pop('next', '/auth/status')
+			session.clear()
+			session['provider'] = provider_name
+			session.update(provider.get_normalized_profile(access_token))
+			return redirect(next_url)
+		raise NotFound()
+
+	# Page which displays the status of the user's login session.
 	def on_status(self, request, session):
 		return self.render_template(
 			"status.html",
 			session=json.dumps(session, sort_keys=True, indent=4, ensure_ascii=False)
 			)
 
-	# Display an error message
+	# When login fails we redirect to this page.
 	def on_error(self, request, session, provider_name):
 		return self.render_template(
 			"error.html",
@@ -241,7 +283,7 @@ class WSGIAuthMiddleware(object):
 			error_description=request.args.get('error_description')
 			)
 
-	# Destroy the session cookie
+	# User has hit the logout button. Destory the session cookie.
 	def on_logout(self, request, session):
 		session.clear()
 		return redirect("/")
