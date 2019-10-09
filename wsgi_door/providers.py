@@ -381,8 +381,7 @@ available_auth_providers = {
 # Initialize those authentication providers for which client keys have been provided.
 def init_providers(config):
 	auth_providers = {}
-	for provider_name, provider_keys in config.items():
-		auth_providers[provider_name] = available_auth_providers[provider_name](provider_keys)
+	for provider_name, provider_config in config.items():
+		auth_providers[provider_name] = available_auth_providers[provider_name](provider_config)
 	return auth_providers
-
 
