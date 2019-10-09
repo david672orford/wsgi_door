@@ -7,21 +7,16 @@ from werkzeug.contrib.securecookie import SecureCookie
 from jinja2 import Environment, FileSystemLoader
 import json
 from urllib.parse import urlencode
-from .providers import available_auth_providers
 
 class JSONSecureCookie(SecureCookie):
 	serialization_method = json
 
 class WsgiDoorAuth(object):
 	cookie_name = "wsgi_door"
-	def __init__(self, app, client_keys, secret, templates=None):
+	def __init__(self, app, auth_providers, secret, templates=None):
 		self.app = app					# The WSGI app which we are wrapping
 		self.secret = secret			# for signing the cookie
-
-		# Initialize those authentication providers for which client keys have been provided.
-		self.auth_providers = {}
-		for provider_name, provider_keys in client_keys.items():
-			self.auth_providers[provider_name] = available_auth_providers[provider_name](provider_keys)
+		self.auth_providers = auth_providers
 
 		self.url_map = Map([
 			Rule('/auth/login/', endpoint='on_login_index'),
@@ -78,10 +73,7 @@ class WsgiDoorAuth(object):
 			pass
 
 		# If we reach this point, we pass thru to the wrapped WSGI application.
-		if 'remote_user' in session:
-			environ['AUTH_TYPE'] = session['provider']
-			environ['REMOTE_USER'] = session['remote_user']
-		environ['wsgi_door_session'] = session
+		environ['wsgi_door'] = session
 		return self.app(environ, start_response)
 
 	# The user has asked for a list of the available login providers.
@@ -139,16 +131,42 @@ class WsgiDoorAuth(object):
 		return redirect("/")
 
 class WsgiDoorFilter(object):
-	def __init__(self, app, protected_paths=[], redirect_to="/auth/login/"):
+	def __init__(self, app, login_path="/auth/login/", deny_path="/auth/deny", protected_paths=[], allowed_groups=None):
 		self.app = app
+		self.login_path = login_path
+		self.deny_path = deny_path
 		self.protected_paths = protected_paths
-		self.redirect_to = redirect_to
+		self.allowed_groups = set(allowed_groups) if allowed_groups else None
+
 	def __call__(self, environ, start_response):
-		if not 'REMOTE_USER' in environ:
-			request = Request(environ)
-			for protected_path in self.protected_paths:
-				if request.path.startswith(protected_path):
-					environ['wsgi_door_session']['next'] = request.path
-					return redirect(self.redirect_to)(environ, start_response)
+		session = environ['wsgi_door']
+		request = Request(environ)
+		if self.path_is_protected(request.path):
+			if not 'provider' in session:
+				session['next'] = request.path
+				return redirect(self.login_path)(environ, start_response)
+			if not self.user_is_allowed(session):
+				return redirect(self.deny_path)
+		if 'provider' in session:
+			environ['AUTH_TYPE'] = session['provider']
+			environ['REMOTE_USER'] = self.build_remote_user(session)
 		return self.app(environ, start_response)
+
+	# Override to provide new kinds of path tests
+	def path_is_protected(self, path):
+		for protected_path in self.protected_paths:
+			if path.startswith(protected_path):
+				return True
+		return False
+
+	# Override to provide new kinds of user permissions
+	def user_is_allowed(self, session):
+		return set(session.get('groups',[])).intersection(allowed_groups)
+
+	# Override to change the format of REMOTE_USER.
+	def build_remote_user(self, session):
+		if session['username']:
+			return session['username']
+		else:
+			return "{provider}:{id}".format_map(session)
 
