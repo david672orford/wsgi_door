@@ -22,6 +22,7 @@ class AuthProviderOAuth1Base(object):
 	request_token_url = None
 	authorize_url = None
 	access_token_url = None
+	logout_url = None
 
 	def __init__(self, keys):
 		self.client_id = keys['client_id']
@@ -86,6 +87,7 @@ class AuthProviderOAuth2Base(object):
 	authorize_url = None
 	access_token_url = None
 	profile_url = None
+	logout_url = None
 	scope = ''
 	user_agent = 'wsgi_door:v0.0'
 
@@ -269,6 +271,7 @@ class AuthProviderAzure(AuthProviderOAuth2Base):
 	#scope = 'openid email user.read Directory.Read.All'
 	scope = 'openid'
 	profile_url = 'https://graph.microsoft.com/v1.0/me'
+	logout_url = "https://login.microsoftonline.com/{client_id}/oauth2/logout?post_logout_redirect_uri={logged_out_url}"
 	def get_groups(self, access_token):
 		response = self.get_json('https://graph.microsoft.com/v1.0/me/memberOf', access_token)
 		groups = []

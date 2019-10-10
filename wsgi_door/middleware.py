@@ -130,7 +130,13 @@ class WsgiDoorAuth(object):
 
 	# User has hit the logout button. Destory the session cookie.
 	def on_logout(self, request, session):
+		provider_name = session.get('provider')
 		session.clear()
+		if provider_name is not None:
+			provider = self.auth_providers.get(provider_name)
+			if provider is not None and provider.logout_url is not None:
+				logged_out_url = "{scheme}://{host}".format(scheme = request.scheme, host = request.host)
+				return redirect(provider.logged_url.format(client_id=self.client_id, logged_out_url=logged_out_url))
 		return redirect("/")
 
 class WsgiDoorFilter(object):
