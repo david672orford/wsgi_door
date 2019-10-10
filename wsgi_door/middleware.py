@@ -13,6 +13,7 @@ class JSONSecureCookie(SecureCookie):
 
 class WsgiDoorAuth(object):
 	cookie_name = "wsgi_door"
+	stylesheet_url = "/static/auth/styles.css"
 	def __init__(self, app, auth_providers, secret, templates=None):
 		self.app = app					# The WSGI app which we are wrapping
 		self.secret = secret			# for signing the cookie
@@ -23,6 +24,7 @@ class WsgiDoorAuth(object):
 			Rule('/auth/login/<provider_name>', endpoint='on_login'),
 			Rule('/auth/authorized/<provider_name>', endpoint='on_authorized'),
 			Rule('/auth/error/<provider_name>', endpoint='on_error'),
+			Rule('/auth/denied', endpoint='on_denied'),
 			Rule('/auth/status', endpoint='on_status'),
 			Rule('/auth/logout', endpoint='on_logout'),
 			])
@@ -82,7 +84,7 @@ class WsgiDoorAuth(object):
 		# If there is only one provider configured, don't bother with the provider selection page.
 		if len(self.auth_providers) == 1:
 			return self.on_login(request, session, list(self.auth_providers.keys())[0])
-		return self.render_template("login.html", providers=self.auth_providers.keys())
+		return self.render_template("login.html", providers=self.auth_providers.keys(), stylesheet_url=self.stylesheet_url)
 
 	# User has asked to log in using one of the authentication providers offered.
 	# Redirect the user's browser to the provider's login page.
@@ -116,7 +118,8 @@ class WsgiDoorAuth(object):
 	def on_status(self, request, session):
 		return self.render_template(
 			"status.html",
-			session=json.dumps(session, sort_keys=True, indent=4, ensure_ascii=False)
+			session=json.dumps(session, sort_keys=True, indent=4, ensure_ascii=False),
+			stylesheet_url=self.stylesheet_url,
 			)
 
 	# When login fails we redirect to this page.
@@ -125,8 +128,13 @@ class WsgiDoorAuth(object):
 			"error.html",
 			provider=provider_name,
 			error=request.args.get('error'),
-			error_description=request.args.get('error_description')
+			error_description=request.args.get('error_description'),
+			stylesheet_url=stylesheet_url,
 			)
+
+	# Access denied.
+	def on_denied(self, request, session):
+		return self.render_template("denied.html", stylesheet_url=stylesheet_url)
 
 	# User has hit the logout button. Destory the session cookie.
 	def on_logout(self, request, session):
@@ -140,7 +148,7 @@ class WsgiDoorAuth(object):
 		return redirect("/")
 
 class WsgiDoorFilter(object):
-	def __init__(self, app, login_path="/auth/login/", deny_path="/auth/deny", protected_paths=[], allowed_groups=None):
+	def __init__(self, app, login_path="/auth/login/", deny_path="/auth/denied", protected_paths=[], allowed_groups=None):
 		self.app = app
 		self.login_path = login_path
 		self.deny_path = deny_path
@@ -155,7 +163,7 @@ class WsgiDoorFilter(object):
 				session['next'] = request.path
 				return redirect(self.login_path)(environ, start_response)
 			if not self.user_is_allowed(session):
-				return redirect(self.deny_path)
+				return redirect(self.denied)
 		if 'provider' in session:
 			environ['AUTH_TYPE'] = session['provider']
 			environ['REMOTE_USER'] = self.build_remote_user(session)
