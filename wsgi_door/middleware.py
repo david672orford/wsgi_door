@@ -155,16 +155,18 @@ class WsgiDoorFilter(object):
 			environ['REMOTE_USER'] = self.build_remote_user(session)
 		return self.app(environ, start_response)
 
-	# Override to provide new kinds of path tests
+	# Override to provide new kinds of protected path tests
 	def path_is_protected(self, path):
 		for protected_path in self.protected_paths:
 			if path.startswith(protected_path):
 				return True
 		return False
 
-	# Override to provide new kinds of user permissions
+	# Override to provide new kinds of user authorization tests
 	def user_is_allowed(self, session):
-		return set(session.get('groups',[])).intersection(allowed_groups)
+		if self.allowed_groups is not None:
+			return self.allowed_groups.intersection(set(session.get('groups',[])))
+		return True
 
 	# Override to change the format of REMOTE_USER.
 	def build_remote_user(self, session):
