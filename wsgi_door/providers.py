@@ -11,7 +11,7 @@ from base64 import b64encode
 # https://oauth.net/articles/authentication/
 # https://stackoverflow.com/questions/2138656/signing-requests-in-python-for-oauth
 
-# Enable to dump our communications with the authentication provider.
+# Uncomment to enable debugging of communications with the authentication provider.
 #import urllib.request
 #urllib.request.install_opener(urllib.request.build_opener(urllib.request.HTTPSHandler(debuglevel=1)))
 
@@ -213,7 +213,7 @@ class AuthProviderGoogle(AuthProviderOAuth2Base):
 			picture = profile['picture'],
 			)
 
-# https:/developers.facebook.com
+# https://developers.facebook.com
 class AuthProviderFacebook(AuthProviderOAuth2Base):
 	authorize_url = 'https://www.facebook.com/dialog/oauth'
 	access_token_url = 'https://graph.facebook.com/oauth/access_token'
