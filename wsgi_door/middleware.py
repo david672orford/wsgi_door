@@ -136,7 +136,7 @@ class WsgiDoorAuth(object):
 			provider = self.auth_providers.get(provider_name)
 			if provider is not None and provider.logout_url is not None:
 				logged_out_url = "{scheme}://{host}".format(scheme = request.scheme, host = request.host)
-				return redirect(provider.logged_url.format(client_id=self.client_id, logged_out_url=logged_out_url))
+				return redirect(provider.logout_url.format(client_id=self.client_id, logged_out_url=logged_out_url))
 		return redirect("/")
 
 class WsgiDoorFilter(object):
