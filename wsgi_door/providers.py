@@ -207,7 +207,7 @@ class AuthProviderGoogle(AuthProviderOAuth2Base):
 		profile = self.get_profile(access_token)
 		return dict(
 			id = id_token['sub'],
-			username = None,
+			username = id_token['email'],
 			name = profile['name'],
 			email = id_token['email'],
 			picture = profile['picture'],
