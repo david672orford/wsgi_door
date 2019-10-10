@@ -79,6 +79,9 @@ class WsgiDoorAuth(object):
 	# The user has asked for a list of the available login providers.
 	# Render from an Jinja2 template.
 	def on_login_index(self, request, session):
+		# If there is only one provider configured, don't bother with the provider selection page.
+		if len(self.auth_providers) == 1:
+			return self.on_login(request, session, self.auth_providers.keys()[0])
 		return self.render_template("login.html", providers=self.auth_providers.keys())
 
 	# User has asked to log in using one of the authentication providers offered.

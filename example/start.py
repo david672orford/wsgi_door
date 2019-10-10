@@ -4,7 +4,8 @@ sys.path.append("..")
 from werkzeug.serving import run_simple
 from werkzeug.middleware.proxy_fix import ProxyFix
 from app import app
-from wsgi_door import init_providers, WsgiDoorAuth, WsgiDoorFilter
+from wsgi_door.providers import init_providers
+from wsgi_door.middleware import WsgiDoorAuth, WsgiDoorFilter
 from config import auth_client_keys
 auth_providers = init_providers(auth_client_keys)
 app = WsgiDoorFilter(app, protected_paths=["/admin/", "/private/"])
