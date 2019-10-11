@@ -95,6 +95,7 @@ class AuthProviderOAuth2Base(object):
 		self.keys = keys
 		self.client_id = keys['client_id']
 		self.client_secret = keys['client_secret']
+		self.config = keys
 
 	# Build the URL to which the user's browser should be redirected to reach
 	# the authentication provider's login page.
@@ -110,7 +111,10 @@ class AuthProviderOAuth2Base(object):
 			#prompt = 'consent',
 			prompt = 'select_account',
 			)
-		return '{authorize_url}?{query}'.format(authorize_url=self.authorize_url, query=urlencode(query))
+		return '{authorize_url}?{query}'.format(
+			authorize_url=self.authorize_url.format_map(self.config),
+			query=urlencode(query)
+			)
 
 	# Called when the browser gets redirected back to our site. Contact the
 	# authentication provider directly and ask for an access_token.
@@ -134,13 +138,15 @@ class AuthProviderOAuth2Base(object):
 			)
 		try:
 			response = urlopen(
-				Request(self.access_token_url, headers={
-					'Content-Type':'application/x-www-form-urlencoded',
-					'Accept':'application/json',
-					'User-Agent':self.user_agent,
-					# For Reddit
-					'Authorization':'Basic ' + b64encode(("%s:%s" % (self.client_id, self.client_secret)).encode("ascii")).decode("ascii")
-					}),
+				Request(self.access_token_url.format_map(self.config),
+					headers={
+						'Content-Type':'application/x-www-form-urlencoded',
+						'Accept':'application/json',
+						'User-Agent':self.user_agent,
+						# For Reddit
+						'Authorization':'Basic ' + b64encode(("%s:%s" % (self.client_id, self.client_secret)).encode("ascii")).decode("ascii")
+						}
+					),
 				# Some providers do not support JSON requests, so we have to use form encoding.
 				data=urlencode(form).encode('utf-8')
 				)	
@@ -266,9 +272,8 @@ class AuthProviderGithub(AuthProviderOAuth2Base):
 
 # https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade
 class AuthProviderAzure(AuthProviderOAuth2Base):
-	authorize_url = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize'
-	access_token_url = 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
-	#scope = 'openid email user.read Directory.Read.All'
+	authorize_url = 'https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize'
+	access_token_url = 'https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token'
 	scope = 'openid'
 	profile_url = 'https://graph.microsoft.com/v1.0/me'
 	logout_url = "https://login.microsoftonline.com/{client_id}/oauth2/logout?post_logout_redirect_uri={logged_out_url}"
