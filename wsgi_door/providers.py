@@ -277,7 +277,7 @@ class AuthProviderGithub(AuthProviderOAuth2Base):
 class AuthProviderAzure(AuthProviderOAuth2Base):
 	authorize_url = 'https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize'
 	access_token_url = 'https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token'
-	scope = 'openid'
+	scope = 'openid user.read Directory.Read.All'
 	profile_url = 'https://graph.microsoft.com/v1.0/me'
 	logout_url = "https://login.microsoftonline.com/{client_id}/oauth2/logout?post_logout_redirect_uri={logged_out_url}"
 	def get_groups(self, access_token):
