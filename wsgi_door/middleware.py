@@ -130,14 +130,14 @@ class WsgiDoorAuth(object):
 			provider=provider_name,
 			error=request.args.get('error'),
 			error_description=request.args.get('error_description'),
-			stylesheet_url=stylesheet_url,
+			stylesheet_url=self.stylesheet_url,
 			)
 
 	# Access denied.
 	def on_denied(self, request, session):
 		return self.render_template(
 			"denied.html",
-			stylesheet_url=stylesheet_url,
+			stylesheet_url=self.stylesheet_url,
 			session=session,
 			)
 
