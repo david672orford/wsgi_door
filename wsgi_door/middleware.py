@@ -165,8 +165,6 @@ class WsgiDoorFilter(object):
 			if not 'provider' in session:
 				response = redirect(self.login_path)
 				session['next'] = request.path
-				print("response:", response)
-				print("session:", session)
 				session.save_cookie(response, key=self.cookie_name, httponly=True, secure=True)
 				return response(environ, start_response)
 			if not self.user_is_allowed(session):
