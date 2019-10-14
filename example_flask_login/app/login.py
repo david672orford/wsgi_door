@@ -4,11 +4,13 @@ from .models import db, User
 
 login_manager = LoginManager()
 
+# This is called whenever the user tries to access a protected view while not logged in.
 @login_manager.unauthorized_handler
 def unauthorized():
 	request.environ['wsgi_door']['next'] = request.url
 	return redirect("/auth/login/")
 
+# This is called before each request so that if the user is logged in we can load his record.
 @login_manager.request_loader
 def load_user_from_request(request):
 	wsgi_door = request.environ['wsgi_door']
