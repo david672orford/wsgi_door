@@ -235,6 +235,7 @@ class AuthProviderFacebook(AuthProviderOAuth2Base):
 			name = profile['name'],
 			email = None,
 			picture = None,
+			groups = None,
 			)
 
 # https://developer.twitter.com/en/apps
@@ -252,6 +253,7 @@ class AuthProviderTwitter(AuthProviderOAuth1Base):
 			name = None,
 			email = None,
 			picture = profile['profile_image_url_https'],
+			groups = None,
 			)
 
 # https://github.com/settings/apps
@@ -267,7 +269,8 @@ class AuthProviderGithub(AuthProviderOAuth2Base):
 			username = profile['login'],
 			name = profile['name'],
 			email = profile['email'],		# may be None
-			picture = profile['avatar_url']
+			picture = profile['avatar_url'],
+			groups = None,
 			)
 
 # https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade
@@ -298,8 +301,9 @@ class AuthProviderAzure(AuthProviderOAuth2Base):
 
 # https://www.linkedin.com/developers/apps/
 class AuthProviderLinkedin(AuthProviderOAuth2Base):
-	authorize_url = None
-	access_token_url = None
+	authorize_url = 'https://www.linkedin.com/oauth/v2/accessToken'
+	access_token_url = 'https://www.linkedin.com/uas/oauth2/accessToken'
+	profile_url = 'https://api.linkedin.com/v1/people/~'
 	scope = None
 
 # https://developers.pinterest.com/apps/
@@ -317,6 +321,7 @@ class AuthProviderPinterest(AuthProviderOAuth2Base):
 			name = '%s %s' % (profile['first_name'], profile['last_name']),
 			email = None,
 			picture = None,
+			groups = None,
 			)
 
 # https://developer.wordpress.com/apps/
@@ -333,6 +338,7 @@ class AuthProviderWordpress(AuthProviderOAuth2Base):
 			name = None,
 			email = profile['email'],
 			picture = profile['avatar_URL'],
+			groups = None,
 			)
 
 # https://stackapps.com/apps/oauth/
@@ -353,6 +359,7 @@ class AuthProviderStackexchange(AuthProviderOAuth2Base):
 			username = profile['display_name'],
 			name = None,
 			picture = profile['profile_image'],
+			groups = None,
 			)
 
 # https://www.reddit.com/prefs/apps
@@ -370,7 +377,8 @@ class AuthProviderReddit(AuthProviderOAuth2Base):
 			username = profile['name'],
 			name = None,
 			email = None,
-			picture = profile['icon_img']
+			picture = profile['icon_img'],
+			groups = None,
 			)
 
 available_auth_providers = {
@@ -379,7 +387,7 @@ available_auth_providers = {
 	'twitter': AuthProviderTwitter,
 	'github': AuthProviderGithub,
 	'azure': AuthProviderAzure,
-	#'linkedin': AuthProviderLinkedin,
+	'linkedin': AuthProviderLinkedin,
 	'pinterest': AuthProviderPinterest,
 	'wordpress': AuthProviderWordpress,
 	'stackexchange': AuthProviderStackexchange,

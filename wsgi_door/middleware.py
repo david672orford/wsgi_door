@@ -135,7 +135,11 @@ class WsgiDoorAuth(object):
 
 	# Access denied.
 	def on_denied(self, request, session):
-		return self.render_template("denied.html", stylesheet_url=stylesheet_url)
+		return self.render_template(
+			"denied.html",
+			stylesheet_url=stylesheet_url,
+			session=session,
+			)
 
 	# User has hit the logout button. Destory the session cookie.
 	def on_logout(self, request, session):
@@ -162,13 +166,20 @@ class WsgiDoorFilter(object):
 		session = environ[self.cookie_name]
 		request = Request(environ)
 		if self.path_is_protected(request.path):
+			# Protected paths may only be accessed over HTTPS
+			if request.scheme != "https":
+				response = redirect("https://{host}{path}".format(host=request.host, path=request_path))
+				return response(environ, start_response)
+			# If user is not logged in,
 			if not 'provider' in session:
 				response = redirect(self.login_path)
 				session['next'] = request.path
 				session.save_cookie(response, key=self.cookie_name, httponly=True, secure=True)
 				return response(environ, start_response)
+			# If user is logged in but not authorized,
 			if not self.user_is_allowed(session):
-				return redirect(self.denied_path)(environ, start_response)
+				response = redirect(self.denied_path)
+				return response(environ, start_response)
 		if 'provider' in session:
 			environ['AUTH_TYPE'] = session['provider']
 			environ['REMOTE_USER'] = self.build_remote_user(session)
