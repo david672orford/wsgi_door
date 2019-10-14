@@ -10,5 +10,13 @@
 <h1>Access Denied</h1>
 <p>You are logged in as {{session['username']}}, but this account has
 not been granted access to this resource.</p>
+{% if session['groups'] %}
+<h2>Your Group Memberships</h2>
+<ul>
+{% for group in session['groups'] %}
+<li>{{ group }}</li>
+{% endfor %}
+</ul>
+{% endif %}
 </body>
 </html>
