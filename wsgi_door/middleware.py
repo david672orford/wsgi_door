@@ -14,6 +14,7 @@ class JSONSecureCookie(SecureCookie):
 class WsgiDoorAuth(object):
 	cookie_name = "wsgi_door"
 	stylesheet_url = "/static/auth/styles.css"
+
 	def __init__(self, app, auth_providers, secret, templates=None):
 		self.app = app					# The WSGI app which we are wrapping
 		self.secret = secret			# for signing the cookie
@@ -75,7 +76,7 @@ class WsgiDoorAuth(object):
 			pass
 
 		# If we reach this point, we pass thru to the wrapped WSGI application.
-		environ['wsgi_door'] = session
+		environ[self.cookie_name] = session
 		return self.app(environ, start_response)
 
 	# The user has asked for a list of the available login providers.
@@ -104,7 +105,7 @@ class WsgiDoorAuth(object):
 		if provider is not None:
 			callback_url = self.callback_url(request, provider_name)
 			access_token = provider.get_access_token(request, session, callback_url)
-			print("access_token:", json.dumps(access_token, indent=4, ensure_ascii=False))
+			#print("access_token:", json.dumps(access_token, indent=4, ensure_ascii=False))
 			if 'error' in access_token:
 				return redirect(self.error_url(request, provider_name, error=access_token.get('error'), error_description=access_token.get('error_description')))
 			next_url = session.pop('next', '/auth/status')
@@ -148,22 +149,26 @@ class WsgiDoorAuth(object):
 		return redirect("/")
 
 class WsgiDoorFilter(object):
-	def __init__(self, app, login_path="/auth/login/", deny_path="/auth/denied", protected_paths=[], allowed_groups=None):
+	cookie_name = "wsgi_door"
+
+	def __init__(self, app, login_path="/auth/login/", denied_path="/auth/denied", protected_paths=[], allowed_groups=None):
 		self.app = app
 		self.login_path = login_path
-		self.deny_path = deny_path
+		self.denied_path = denied_path
 		self.protected_paths = protected_paths
 		self.allowed_groups = set(allowed_groups) if allowed_groups else None
 
 	def __call__(self, environ, start_response):
-		session = environ['wsgi_door']
+		session = environ[self.cookie_name]
 		request = Request(environ)
 		if self.path_is_protected(request.path):
 			if not 'provider' in session:
 				session['next'] = request.path
-				return redirect(self.login_path)(environ, start_response)
+				response = redirect(self.login_path)(environ, start_response)
+				session.save_cookie(response, key=self.cookie_name, httponly=True, secure=True)
+				return response
 			if not self.user_is_allowed(session):
-				return redirect(self.denied)
+				return redirect(self.denied_path)
 		if 'provider' in session:
 			environ['AUTH_TYPE'] = session['provider']
 			environ['REMOTE_USER'] = self.build_remote_user(session)
