@@ -1,5 +1,5 @@
 import os
-from werkzeug.wrappers import BaseRequest as Request, Response
+from werkzeug.wrappers import BaseRequest as Request, BaseResponse as Response
 from werkzeug.routing import Map, Rule
 from werkzeug.exceptions import NotFound
 from werkzeug.utils import redirect
@@ -163,8 +163,10 @@ class WsgiDoorFilter(object):
 		request = Request(environ)
 		if self.path_is_protected(request.path):
 			if not 'provider' in session:
-				session['next'] = request.path
 				response = redirect(self.login_path)
+				session['next'] = request.path
+				print("response:", response)
+				print("session:", session)
 				session.save_cookie(response, key=self.cookie_name, httponly=True, secure=True)
 				return response(environ, start_response)
 			if not self.user_is_allowed(session):
