@@ -14,7 +14,7 @@ cookie_name = "wsgi_door"
 class JSONSecureCookie(SecureCookie):
 	"""Object representing the login session cookie"""
 	serialization_method = json
-	def set_next_url(response, next_url):
+	def set_next_url(self, response, next_url):
 		"""Add the URL to redirect to after login to the session and set the session
 		cookie in the response object provided"""
 		self['next'] = next_url
