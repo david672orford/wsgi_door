@@ -4,13 +4,7 @@ from .models import db, User
 
 login_manager = LoginManager()
 
-# This is called whenever the user tries to access a protected view while not logged in.
-@login_manager.unauthorized_handler
-def unauthorized():
-	request.environ['wsgi_door']['next'] = request.url
-	return redirect("/auth/login/")
-
-# This is called before each request so that if the user is logged in we can load his record.
+# Start of request hook. If the user has a wsgi_door session, load his user record.
 @login_manager.request_loader
 def load_user_from_request(request):
 	wsgi_door = request.environ['wsgi_door']
@@ -21,5 +15,14 @@ def load_user_from_request(request):
 			user = User(id=key, username=wsgi_door['username'], name=wsgi_door['name'], email=wsgi_door['email'])
 			db.session.add(user)
 			db.session.commit()
-		return user	
-	return None	
+		return user
+	return None
+
+# User has hit a protected view while not logged in. Save the requested URL
+# and send him to the login page.
+@login_manager.unauthorized_handler
+def unauthorized():
+	response = redirect("/auth/login/")
+	request.environ['wsgi_door'].set_next_url(response, request.url)
+	return response
+

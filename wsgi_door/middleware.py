@@ -8,11 +8,22 @@ from jinja2 import Environment, FileSystemLoader
 import json
 from urllib.parse import urlencode
 
+# Name of our session cookie
+cookie_name = "wsgi_door"
+
 class JSONSecureCookie(SecureCookie):
+	"""Object representing the login session cookie"""
 	serialization_method = json
+	def set_next_url(response, next_url):
+		"""Add the URL to redirect to after login to the session and set the session
+		cookie in the response object provided"""
+		self['next'] = next_url
+		self.save_cookie(response, cookie_name, httponly=True, secure=True)
 
 class WsgiDoorAuth(object):
-	cookie_name = "wsgi_door"
+	"""WSGI middleware which inserts authentication using the specified
+	providers"""
+
 	stylesheet_url = "/static/auth/styles.css"
 
 	def __init__(self, app, auth_providers, secret, templates=None):
@@ -62,7 +73,7 @@ class WsgiDoorAuth(object):
 	# through to the wrapped WSGI application.
 	def __call__(self, environ, start_response):
 		request = Request(environ)
-		session = JSONSecureCookie.load_cookie(request, self.cookie_name, self.secret)
+		session = JSONSecureCookie.load_cookie(request, cookie_name, self.secret)
 
 		# Try to dispatch to one of our handler functions
 		adapter = self.url_map.bind_to_environ(request.environ)
@@ -70,13 +81,13 @@ class WsgiDoorAuth(object):
 		try:
 			endpoint, values = adapter.match()
 			response = getattr(self, endpoint)(request, session, **values)
-			session.save_cookie(response, key=self.cookie_name, httponly=True, secure=True)
+			session.save_cookie(response, key=cookie_name, httponly=True, secure=True)
 			return response(environ, start_response)
 		except NotFound:
 			pass
 
 		# If we reach this point, we pass thru to the wrapped WSGI application.
-		environ[self.cookie_name] = session
+		environ['wsgi_door'] = session
 		return self.app(environ, start_response)
 
 	# The user has asked for a list of the available login providers.
@@ -163,7 +174,7 @@ class WsgiDoorFilter(object):
 		self.allowed_groups = set(allowed_groups) if allowed_groups else None
 
 	def __call__(self, environ, start_response):
-		session = environ[self.cookie_name]
+		session = environ[cookie_name]
 		request = Request(environ)
 		if self.path_is_protected(request.path):
 			# Protected paths may only be accessed over HTTPS
@@ -173,8 +184,7 @@ class WsgiDoorFilter(object):
 			# If user is not logged in,
 			if not 'provider' in session:
 				response = redirect(self.login_path)
-				session['next'] = request.path
-				session.save_cookie(response, key=self.cookie_name, httponly=True, secure=True)
+				session.set_next_url(response, request.path)
 				return response(environ, start_response)
 			# If user is logged in but not authorized,
 			if not self.user_is_allowed(session):
