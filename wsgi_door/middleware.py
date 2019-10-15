@@ -125,7 +125,7 @@ class WsgiDoorAuth(object):
 			try:
 				session.update(provider.get_normalized_profile(access_token))
 			except Exception as e:
-				return redirect(self.error_url(request, provider_name, error='profile_fetch_failed', str(e)))
+				return redirect(self.error_url(request, provider_name, error='profile_fetch_failed', error_description=str(e)))
 			return redirect(next_url)
 		raise NotFound()
 
