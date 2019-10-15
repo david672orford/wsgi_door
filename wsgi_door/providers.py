@@ -151,8 +151,7 @@ class AuthProviderOAuth2Base(object):
 				data=urlencode(form).encode('utf-8')
 				)	
 		except urllib.error.HTTPError as e:
-			print(e)
-			print(e.read())
+			#print(e.read())
 			return dict(error="bad_response", error_description="HTTP request failed: %s %s" % (e.code, e.reason))
 			
 		content_type = response.info().get_content_type()
@@ -173,6 +172,7 @@ class AuthProviderOAuth2Base(object):
 
 		return access_token
 
+	# Send an HTTP query (using the access_token) and parse the result as JSON.
 	def get_json(self, url, access_token_dict, **kwargs):
 		if len(kwargs.keys()):
 			url = url + "?" + urlencode(kwargs)
@@ -243,7 +243,6 @@ class AuthProviderTwitter(AuthProviderOAuth1Base):
 	request_token_url = 'https://api.twitter.com/oauth/request_token'
 	authorize_url = 'https://api.twitter.com/oauth/authenticate'
 	access_token_url = 'https://api.twitter.com/oauth/access_token'
-	#profile_url = 'https://api.twitter.com/1.1/account/settings.json'
 	profile_url = 'https://api.twitter.com/1.1/users/show.json?user_id={user_id}'
 	def get_normalized_profile(self, access_token):
 		profile = self.get_profile(access_token)

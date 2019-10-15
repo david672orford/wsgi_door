@@ -122,7 +122,10 @@ class WsgiDoorAuth(object):
 			next_url = session.pop('next', '/auth/status')
 			session.clear()
 			session['provider'] = provider_name
-			session.update(provider.get_normalized_profile(access_token))
+			try:
+				session.update(provider.get_normalized_profile(access_token))
+			except Exception as e:
+				return redirect(self.error_url(request, provider_name, error='profile_fetch_failed', str(e)))
 			return redirect(next_url)
 		raise NotFound()
 
