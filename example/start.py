@@ -1,6 +1,6 @@
 #! /usr/bin/python3 -B
 import sys
-sys.path.append("..")
+sys.path.insert(1, "..")
 
 from werkzeug.serving import run_simple
 from werkzeug.middleware.proxy_fix import ProxyFix
