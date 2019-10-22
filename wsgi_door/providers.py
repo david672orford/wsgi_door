@@ -193,16 +193,25 @@ class AuthProviderOAuth2Base(object):
 
 	# Send a request to the provider's url for retrieving the user's profile.
 	def get_profile(self, access_token):
-		assert self.profile_url is not None
+		if self.profile_url is None:
+			return None
 		profile = self.get_json(self.profile_url, access_token)
-		print("profile:", json.dumps(profile, indent=4, sort_keys=True))
 		return profile
 
 	# Extract standard user profile information from the information included
 	# with the access token. If it is not enough, call .get_profile().
 	# This is a stub which should be overriden in derived classes.
-	def get_normalized_profile(self, access_token):
-		return dict()
+	def normalize_profile(self, access_token, profile):
+		print("No profile normalizer defined for this provider")
+		print("access_token:", json.dumps(access_token, indent=4, sort_keys=True))
+		print("profile:", json.dumps(profile, indent=4, sort_keys=True))
+		return dict(
+			id = None,
+			username = None,
+			name = None,
+			email = None,
+			picture = None,
+			)
 
 # https://console.developers.google.com/
 class AuthProviderGoogle(AuthProviderOAuth2Base):
@@ -210,9 +219,8 @@ class AuthProviderGoogle(AuthProviderOAuth2Base):
 	access_token_url = 'https://accounts.google.com/o/oauth2/token'
 	scope = 'openid profile email'
 	profile_url = 'https://www.googleapis.com/oauth2/v1/userinfo?alt=json'
-	def get_normalized_profile(self, access_token):
+	def normalize_profile(self, access_token, profile):
 		id_token = access_token['id_token']
-		profile = self.get_profile(access_token)
 		return dict(
 			id = id_token['sub'],
 			username = id_token['email'],
@@ -227,8 +235,7 @@ class AuthProviderFacebook(AuthProviderOAuth2Base):
 	access_token_url = 'https://graph.facebook.com/oauth/access_token'
 	scope = 'email'
 	profile_url = 'https://graph.facebook.com/v1.0/me'
-	def get_normalized_profile(self, access_token):
-		profile = self.get_profile(access_token)
+	def normalize_profile(self, access_token, profile):
 		return dict(
 			id = profile['id'],
 			username = None,
@@ -244,8 +251,7 @@ class AuthProviderTwitter(AuthProviderOAuth1Base):
 	authorize_url = 'https://api.twitter.com/oauth/authenticate'
 	access_token_url = 'https://api.twitter.com/oauth/access_token'
 	profile_url = 'https://api.twitter.com/1.1/users/show.json?user_id={user_id}'
-	def get_normalized_profile(self, access_token):
-		profile = self.get_profile(access_token)
+	def get_normalize_profile(self, access_token, profile):
 		return dict(
 			id = access_token['user_id'],
 			username = access_token['screen_name'],
@@ -261,8 +267,7 @@ class AuthProviderGithub(AuthProviderOAuth2Base):
 	access_token_url = 'https://github.com/login/oauth/access_token'
 	scope = 'openid email'
 	profile_url = 'https://api.github.com/user'
-	def get_normalized_profile(self, access_token):
-		profile = self.get_profile(access_token)
+	def normalize_profile(self, access_token, profile):
 		return dict(
 			id = profile['login'],
 			username = profile['login'],
@@ -285,9 +290,8 @@ class AuthProviderAzure(AuthProviderOAuth2Base):
 		for group in response['value']:
 			groups.append(group['displayName'])
 		return groups
-	def get_normalized_profile(self, access_token):
+	def normalize_profile(self, access_token, profile):
 		id_token = access_token.get('id_token',{})
-		profile = self.get_profile(access_token)
 		return dict(
 			id = profile['userPrincipalName'],
 			username = profile['userPrincipalName'],
@@ -299,11 +303,21 @@ class AuthProviderAzure(AuthProviderOAuth2Base):
 			)
 
 # https://www.linkedin.com/developers/apps/
+# https://docs.microsoft.com/en-us/linkedin/shared/authentication/authorization-code-flow
 class AuthProviderLinkedin(AuthProviderOAuth2Base):
-	authorize_url = 'https://www.linkedin.com/oauth/v2/accessToken'
-	access_token_url = 'https://www.linkedin.com/uas/oauth2/accessToken'
-	profile_url = 'https://api.linkedin.com/v1/people/~'
-	scope = None
+	authorize_url =    'https://www.linkedin.com/oauth/v2/authorization'
+	access_token_url = 'https://www.linkedin.com/oauth/v2/accessToken'
+	profile_url = 'https://api.linkedin.com/v2/me'
+	scope = 'r_liteprofile r_basicprofile r_emailaddress'
+	def normalize_profile(self, access_token, profile):
+		print("profile:", profile)
+		return dict(
+			id = profile['id'],
+			username = None,
+			name = "%s %s" % (profile['localizedFirstName'], profile['localizedLastName']),
+			email = None,
+			picture = None,
+			)
 
 # https://developers.pinterest.com/apps/
 class AuthProviderPinterest(AuthProviderOAuth2Base):
@@ -311,8 +325,7 @@ class AuthProviderPinterest(AuthProviderOAuth2Base):
 	access_token_url = 'https://api.pinterest.com/v1/oauth/token'
 	profile_url = 'https://api.pinterest.com/v1/me/'
 	scope = 'read_public'
-	def get_normalized_profile(self, access_token):
-		profile = self.get_profile(access_token)
+	def normalize_profile(self, access_token, profile):
 		profile = profile['data']
 		return dict(
 			id = profile['id'],
@@ -329,8 +342,7 @@ class AuthProviderWordpress(AuthProviderOAuth2Base):
 	access_token_url = 'https://public-api.wordpress.com/oauth2/token'
 	profile_url = 'https://public-api.wordpress.com/rest/v1/me'
 	scope = 'auth'
-	def get_normalized_profile(self, access_token):
-		profile = self.get_profile(access_token)
+	def normalize_profile(self, access_token, profile):
 		return dict(
 			id = str(profile['ID']),
 			username = profile['display_name'],
@@ -350,8 +362,7 @@ class AuthProviderStackexchange(AuthProviderOAuth2Base):
 		profile = self.get_json(self.profile_url, access_token, site='stackoverflow', key=self.keys['request_key'], access_token=access_token['access_token'])
 		print("profile:", json.dumps(profile, indent=4, sort_keys=True))
 		return profile
-	def get_normalized_profile(self, access_token):
-		profile = self.get_profile(access_token)
+	def normalize_profile(self, access_token, profile):
 		profile = profile['items'][0]
 		return dict(
 			id = str(profile['user_id']),
@@ -369,8 +380,7 @@ class AuthProviderReddit(AuthProviderOAuth2Base):
 	access_token_url = 'https://www.reddit.com/api/v1/access_token'
 	profile_url = 'https://oauth.reddit.com/api/v1/me'
 	scope='identity'
-	def get_normalized_profile(self, access_token):
-		profile = self.get_profile(access_token)
+	def normalize_profile(self, access_token, profile):
 		return dict(
 			id = profile['id'],
 			username = profile['name'],

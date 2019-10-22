@@ -119,13 +119,16 @@ class WsgiDoorAuth(object):
 			#print("access_token:", json.dumps(access_token, indent=4, ensure_ascii=False))
 			if 'error' in access_token:
 				return redirect(self.error_url(request, provider_name, error=access_token.get('error'), error_description=access_token.get('error_description')))
+
+			try:
+				profile = provider.normalize_profile(access_token, provider.get_profile(access_token))
+			except Exception as e:
+				return redirect(self.error_url(request, provider_name, error='profile_fetch_failed', error_description=str(e)))
+
 			next_url = session.pop('next', '/auth/status')
 			session.clear()
 			session['provider'] = provider_name
-			try:
-				session.update(provider.get_normalized_profile(access_token))
-			except Exception as e:
-				return redirect(self.error_url(request, provider_name, error='profile_fetch_failed', error_description=str(e)))
+			session.update(profile)
 			return redirect(next_url)
 		raise NotFound()
 
@@ -162,7 +165,9 @@ class WsgiDoorAuth(object):
 		if provider_name is not None:
 			provider = self.auth_providers.get(provider_name)
 			if provider is not None and provider.logout_url is not None:
+				# The URL to which the browser should be redirected when the logout process is complete
 				logged_out_url = "{scheme}://{host}".format(scheme=request.scheme, host=request.host)
+				# Redirect the browser to the providers logout URL
 				return redirect(provider.logout_url.format(client_id=provider.client_id, logged_out_url=logged_out_url))
 		return redirect("/")
 
