@@ -187,7 +187,7 @@ class WsgiDoorFilter(object):
 		if self.path_is_protected(request.path):
 			# Protected paths may only be accessed over HTTPS
 			if request.scheme != "https":
-				response = redirect("https://{host}{path}".format(host=request.host, path=request_path))
+				response = redirect("https://{host}{path}".format(host=request.host, path=request.path))
 				return response(environ, start_response)
 			# If user is not logged in,
 			if not 'provider' in session:
