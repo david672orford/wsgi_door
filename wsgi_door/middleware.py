@@ -104,7 +104,7 @@ class WsgiDoorAuth(object):
 		provider = self.auth_providers.get(provider_name)
 		if provider is not None:
 			callback_url = self.callback_url(request, provider_name)
-			authorize_url = provider.make_authorize_url(session, callback_url)
+			authorize_url = provider.make_authorize_url(session, callback_url, request.args)
 			if authorize_url is None:
 				authorize_url = self.error_url(request, provider_name, error='no_authorize_url', error_description='Failed to make the authorization URL.')
 			return redirect(authorize_url)

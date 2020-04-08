@@ -28,7 +28,7 @@ class AuthProviderOAuth1Base(object):
 		self.client_id = keys['client_id']
 		self.client_secret = keys['client_secret']
 
-	def make_authorize_url(self, session, redirect_uri):
+	def make_authorize_url(self, session, redirect_uri, extra_args):
 		import oauthlib.oauth1
 		client = oauthlib.oauth1.Client(
 			self.client_id,
@@ -43,6 +43,7 @@ class AuthProviderOAuth1Base(object):
 		response_dict = dict(parse_qsl(response.read().decode("utf-8")))
 		session['oauth_token'] = response_dict.get('oauth_token')
 		session['oauth_token_secret'] = response_dict.get('oauth_token_secret')
+		# FIXME: extra_args ignored
 		return "%s?%s" % (self.authorize_url, urlencode(dict(oauth_token=response_dict.get('oauth_token'))))
 
 	def get_access_token(self, request, session, redirect_uri):
@@ -99,7 +100,7 @@ class AuthProviderOAuth2Base(object):
 
 	# Build the URL to which the user's browser should be redirected to reach
 	# the authentication provider's login page.
-	def make_authorize_url(self, session, redirect_uri):
+	def make_authorize_url(self, session, redirect_uri, extra_args):
 		state = session['state'] = token_hex(8)
 		query = dict(
 			client_id = self.client_id,
@@ -107,10 +108,9 @@ class AuthProviderOAuth2Base(object):
 			response_type = 'code',
 			state = state,
 			scope = self.scope,
-			#prompt = 'login',
-			#prompt = 'consent',
 			prompt = 'select_account',
 			)
+		query.update(extra_args)	
 		return '{authorize_url}?{query}'.format(
 			authorize_url=self.authorize_url.format_map(self.config),
 			query=urlencode(query)
