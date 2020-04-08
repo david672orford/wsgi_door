@@ -285,12 +285,12 @@ class AuthProviderAzure(AuthProviderOAuth2Base):
 	scope = 'openid user.read Directory.Read.All'
 	profile_url = 'https://graph.microsoft.com/v1.0/me'
 	logout_url = "https://login.microsoftonline.com/{client_id}/oauth2/logout?post_logout_redirect_uri={logged_out_url}"
-	#def get_groups(self, access_token):
-	#	response = self.get_json('https://graph.microsoft.com/v1.0/me/memberOf', access_token)
-	#	groups = []
-	#	for group in response['value']:
-	#		groups.append(group['displayName'])
-	#	return groups
+	def get_groups(self, access_token):
+		response = self.get_json('https://graph.microsoft.com/v1.0/me/memberOf', access_token)
+		groups = []
+		for group in response['value']:
+			groups.append(group['displayName'])
+		return groups
 	def normalize_profile(self, access_token, profile):
 		id_token = access_token.get('id_token',{})
 		return dict(
@@ -300,8 +300,7 @@ class AuthProviderAzure(AuthProviderOAuth2Base):
 			#email = id_token['email'],
 			email = profile['mail'],
 			picture = None,
-			#groups = self.get_groups(access_token)
-			groups = id_token.get('groups', [])
+			groups = self.get_groups(access_token)
 			)
 
 # https://www.linkedin.com/developers/apps/
