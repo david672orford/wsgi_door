@@ -121,8 +121,8 @@ class WsgiDoorAuth(object):
 				return redirect(self.error_url(request, provider_name, error=access_token.get('error'), error_description=access_token.get('error_description')))
 
 			try:
-				_profile = provider.get_profile(access_token)
-				profile = provider.normalize_profile(access_token, _profile)
+				profile = provider.get_profile(access_token)
+				profile = provider.normalize_profile(access_token, profile)
 			except Exception as e:
 				return redirect(self.error_url(request, provider_name, error='profile_fetch_failed', error_description=str(e)))
 
@@ -130,7 +130,6 @@ class WsgiDoorAuth(object):
 			session.clear()
 			session['provider'] = provider_name
 			session['access_token'] = access_token
-			session['_profile'] = _profile
 			session.update(profile)
 			return redirect(next_url)
 		raise NotFound()
