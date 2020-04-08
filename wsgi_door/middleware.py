@@ -121,13 +121,16 @@ class WsgiDoorAuth(object):
 				return redirect(self.error_url(request, provider_name, error=access_token.get('error'), error_description=access_token.get('error_description')))
 
 			try:
-				profile = provider.normalize_profile(access_token, provider.get_profile(access_token))
+				_profile = provider.get_profile(access_token)
+				profile = provider.normalize_profile(access_token, _profile)
 			except Exception as e:
 				return redirect(self.error_url(request, provider_name, error='profile_fetch_failed', error_description=str(e)))
 
 			next_url = session.pop('next', '/auth/status')
 			session.clear()
 			session['provider'] = provider_name
+			session['access_token'] = access_token
+			session['_profile'] = _profile
 			session.update(profile)
 			return redirect(next_url)
 		raise NotFound()
@@ -172,6 +175,9 @@ class WsgiDoorAuth(object):
 		return redirect("/")
 
 class WsgiDoorFilter(object):
+	"""WSGI middleware which requires the user to authenticate if he
+	tries to load one of the listed protect paths"""
+
 	cookie_name = "wsgi_door"
 
 	def __init__(self, app, login_path="/auth/login/", denied_path="/auth/denied", protected_paths=[], allowed_groups=None):

@@ -9,6 +9,8 @@ logging in using the configured providers and for logging out. For example:
   Display a list of the configured providers and let the user choose
  /auth/login/google
   Log in using a Google account
+ /auth/login/azure
+  Log in using Microsoft Azure
  /auth/logout
   Destroy the session cookie
 
