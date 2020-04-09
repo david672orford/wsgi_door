@@ -116,7 +116,7 @@ class WsgiDoorAuth(object):
 		if provider is not None:
 			callback_url = self.callback_url(request, provider_name)
 			access_token = provider.get_access_token(request, session, callback_url)
-			#print("access_token:", json.dumps(access_token, indent=4, ensure_ascii=False))
+			print("access_token:", json.dumps(access_token, indent=4, ensure_ascii=False))
 			if 'error' in access_token:
 				return redirect(self.error_url(request, provider_name, error=access_token.get('error'), error_description=access_token.get('error_description')))
 
