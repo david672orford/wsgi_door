@@ -119,15 +119,19 @@ class WsgiDoorAuth(object):
 		if provider is not None:
 			callback_url = self.callback_url(request, provider_name)
 			access_token = provider.get_access_token(request, session, callback_url)
-			logger.debug("access_token: %s" % json.dumps(access_token, indent=4, ensure_ascii=False))
 			if 'error' in access_token:
 				return redirect(self.error_url(request, provider_name, error=access_token.get('error'), error_description=access_token.get('error_description')))
 
 			try:
 				profile = provider.get_profile(access_token)
+			except Exception as e:
+				logger.debug("access_token: %s" % json.dumps(access_token, indent=4, ensure_ascii=False))
+				return redirect(self.error_url(request, provider_name, error='profile_fetch_failed', error_description=str(e)))
+
+			try:
 				profile = provider.normalize_profile(access_token, profile)
 			except Exception as e:
-				return redirect(self.error_url(request, provider_name, error='profile_fetch_failed', error_description=str(e)))
+				return redirect(self.error_url(request, provider_name, error='profile_fetch_failed', error_description="normalization failed"))
 
 			next_url = session.pop('next', '/auth/status')
 			session.clear()
