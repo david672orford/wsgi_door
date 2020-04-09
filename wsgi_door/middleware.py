@@ -7,9 +7,12 @@ from werkzeug.contrib.securecookie import SecureCookie
 from jinja2 import Environment, FileSystemLoader
 import json
 from urllib.parse import urlencode
+import logging
 
 # Name of our session cookie
 cookie_name = "wsgi_door"
+
+logger = logging.getLogger(__name__)
 
 class JSONSecureCookie(SecureCookie):
 	"""Object representing the login session cookie"""
@@ -116,7 +119,7 @@ class WsgiDoorAuth(object):
 		if provider is not None:
 			callback_url = self.callback_url(request, provider_name)
 			access_token = provider.get_access_token(request, session, callback_url)
-			print("access_token:", json.dumps(access_token, indent=4, ensure_ascii=False))
+			logger.debug("access_token: %s" % json.dumps(access_token, indent=4, ensure_ascii=False))
 			if 'error' in access_token:
 				return redirect(self.error_url(request, provider_name, error=access_token.get('error'), error_description=access_token.get('error_description')))
 
