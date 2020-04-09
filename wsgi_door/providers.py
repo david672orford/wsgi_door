@@ -280,8 +280,8 @@ class AuthProviderGithub(AuthProviderOAuth2Base):
 # https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade
 # Set Redirect URL to https://?/auth/authorized/azure
 class AuthProviderAzure(AuthProviderOAuth2Base):
-	authorize_url = 'https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize'
-	access_token_url = 'https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token'
+	authorize_url = 'https://login.microsoftonline.com/{tenant}/oauth2/authorize'
+	access_token_url = 'https://login.microsoftonline.com/{tenant}/oauth2/token'
 	scope = 'openid user.read Directory.Read.All'
 	profile_url = 'https://graph.microsoft.com/v1.0/me'
 	logout_url = "https://login.microsoftonline.com/{client_id}/oauth2/logout?post_logout_redirect_uri={logged_out_url}"
