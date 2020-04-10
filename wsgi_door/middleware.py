@@ -119,6 +119,8 @@ class WsgiDoorAuth(object):
 		if provider is not None:
 			callback_url = self.callback_url(request, provider_name)
 			access_token = provider.get_access_token(request, session, callback_url)
+			logger.debug("access_token: %s" % str(access_token))
+
 			if 'error' in access_token:
 				return redirect(self.error_url(request, provider_name, error=access_token.get('error'), error_description=access_token.get('error_description')))
 
@@ -128,15 +130,17 @@ class WsgiDoorAuth(object):
 				logger.debug("access_token: %s" % json.dumps(access_token, indent=4, ensure_ascii=False))
 				return redirect(self.error_url(request, provider_name, error='profile_fetch_failed', error_description=str(e)))
 
+			logger.debug("raw profile: %s" % json.dumps(profile, indent=4, sort_keys=True))
+
 			try:
 				profile = provider.normalize_profile(access_token, profile)
 			except Exception as e:
+				logger.error("Normalization failed: %s" % str(e))
 				return redirect(self.error_url(request, provider_name, error='profile_fetch_failed', error_description="normalization failed"))
 
 			next_url = session.pop('next', '/auth/status')
 			session.clear()
 			session['provider'] = provider_name
-			session['access_token'] = access_token
 			session.update(profile)
 			return redirect(next_url)
 		raise NotFound()
@@ -183,8 +187,6 @@ class WsgiDoorAuth(object):
 class WsgiDoorFilter(object):
 	"""WSGI middleware which requires the user to authenticate if he
 	tries to load one of the listed protect paths"""
-
-	cookie_name = "wsgi_door"
 
 	def __init__(self, app, login_path="/auth/login/", denied_path="/auth/denied", protected_paths=[], allowed_groups=None):
 		self.app = app
