@@ -94,7 +94,7 @@ class AuthProviderOAuth2Base(object):
 	access_token_args = {}
 	profile_url = None
 	logout_url = None
-	user_agent = 'wsgi_door:v0.0'
+	user_agent = 'wsgi_door:v0.1'
 
 	def __init__(self, keys):
 		self.keys = keys
@@ -191,8 +191,11 @@ class AuthProviderOAuth2Base(object):
 			)
 		content_type = response.info().get_content_type()
 		assert content_type == "application/json", content_type
-		if response.getheader('Content-Encoding','') == 'gzip':	# another Stackexchange bug
+
+		# Another Stackexchange bug (IDP uses gzip without permission)
+		if response.getheader('Content-Encoding','') == 'gzip':
 			response = gzip.GzipFile(fileobj=response)
+
 		response = json.load(response)
 		return response
 
@@ -297,6 +300,27 @@ class AuthProviderAzure(AuthProviderOAuth2Base):
 	access_token_url = 'https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token'
 	profile_url = 'https://graph.microsoft.com/v1.0/me'
 	logout_url = "https://login.microsoftonline.com/{client_id}/oauth2/logout?post_logout_redirect_uri={logged_out_url}"
+
+	def normalize_profile(self, access_token, profile):
+		return dict(
+			id = profile['userPrincipalName'],
+			username = profile['userPrincipalName'],
+			name = profile['displayName'],
+			email = profile['mail'],
+			picture = None,
+			groups = self.get_groups(access_token)
+			)
+		# Most of the above is available from the ID token
+		#id_token = access_token.get('id_token',{})
+		#return dict(
+		#	id = id_token['upd'],
+		#	username = id_token['upn'],
+		#	name = id_token['name'],
+		#	email = None,
+		#	picture = None,
+		#	groups = self.get_groups(access_token)
+		#	)
+
 	def get_groups(self, access_token):
 		response = self.get_json('https://graph.microsoft.com/v1.0/me/memberOf', access_token)
 		logger.debug("raw groups: %s" % json.dumps(response, indent=4, sort_keys=True))
@@ -304,18 +328,20 @@ class AuthProviderAzure(AuthProviderOAuth2Base):
 		for group in response['value']:
 			groups.append(group['displayName'])
 		return groups
-	def normalize_profile(self, access_token, profile):
-		id_token = access_token.get('id_token',{})
-		return dict(
-			id = profile['userPrincipalName'],
-			username = profile['userPrincipalName'],
-			name = profile['displayName'],
-			#email = id_token['email'],
-			email = profile['mail'],
-			picture = None,
-			groups = self.get_groups(access_token)
-			)
 
+	def get_profile_picture(self, access_token):
+		response = urlopen(
+			Request("https://graph.microsoft.com/v1.0/me/photo/$value",
+	           	headers={
+					'Authorization': 'Bearer ' + access_token['access_token'],
+					'Accept':'image/jpeg',
+					'User-Agent':self.user_agent,
+					}
+				)
+			)
+		content_type = response.info().get_content_type()
+		assert content_type == "image/pjpeg" or content_type == "image/pjpeg", content_type
+		return response.read()
 
 # https://www.linkedin.com/developers/apps/
 # https://docs.microsoft.com/en-us/linkedin/shared/authentication/authorization-code-flow

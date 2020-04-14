@@ -89,7 +89,8 @@ class WsgiDoorAuth(object):
 		except NotFound:
 			pass
 
-		# If we reach this point, we pass thru to the wrapped WSGI application.
+		# If we reach this point, it is not one of our URLs. We pass it
+		# thru to the wrapped WSGI application.
 		environ['wsgi_door'] = session
 		return self.app(environ, start_response)
 
@@ -113,10 +114,14 @@ class WsgiDoorAuth(object):
 			return redirect(authorize_url)
 		raise NotFound()
 
-	# Browser has returned from the provider's login page.
+	# Browser has returned from the provider's login page. The query string contains
+	# an authorization code which we exchange for an access token. We use this to
+	# fetch the user's profile and store it in the session cookie.
 	def on_authorized(self, request, session, provider_name):
 		provider = self.auth_providers.get(provider_name)
 		if provider is not None:
+
+			# Get the access token
 			callback_url = self.callback_url(request, provider_name)
 			access_token = provider.get_access_token(request, session, callback_url)
 			logger.debug("access_token: %s" % str(access_token))
@@ -124,25 +129,44 @@ class WsgiDoorAuth(object):
 			if 'error' in access_token:
 				return redirect(self.error_url(request, provider_name, error=access_token.get('error'), error_description=access_token.get('error_description')))
 
+			# Get the user's profile
 			try:
-				profile = provider.get_profile(access_token)
+				raw_profile = provider.get_profile(access_token)
 			except Exception as e:
 				logger.debug("access_token: %s" % json.dumps(access_token, indent=4, ensure_ascii=False))
 				return redirect(self.error_url(request, provider_name, error='profile_fetch_failed', error_description=str(e)))
 
-			logger.debug("raw profile: %s" % json.dumps(profile, indent=4, sort_keys=True))
+			logger.debug("raw profile: %s" % json.dumps(raw_profile, indent=4, sort_keys=True))
 
+			# Every provider has its own format for the user profile. Call a custom
+			# function to extract what we need to create a normalized profile.
 			try:
-				profile = provider.normalize_profile(access_token, profile)
+				profile = provider.normalize_profile(access_token, raw_profile)
 			except Exception as e:
 				logger.error("Normalization failed: %s" % str(e))
 				return redirect(self.error_url(request, provider_name, error='profile_fetch_failed', error_description="normalization failed"))
 
+			# The page which the user originally tried to access should be in the session
+			# cookie. Get it out, then clear the cookie and store the profile in it.
 			next_url = session.pop('next', '/auth/status')
 			session.clear()
 			session['provider'] = provider_name
 			session.update(profile)
+
+			# Send the request down into the underlying WSGI app so that it can
+			# use the access_token if it needs to. Throw away the result.
+			session.provider = provider
+			session.access_token = access_token
+			session.raw_profile = raw_profile
+			request.environ['wsgi_door'] = session
+			def dummy_start_response(status, headers):
+				pass
+			self.app(request.environ, dummy_start_response)
+
+			# Now that the user is logged in, redirect back to the original page.
 			return redirect(next_url)
+
+		# URL does not match a configured provider
 		raise NotFound()
 
 	# Page which displays the status of the user's login session.
@@ -185,8 +209,11 @@ class WsgiDoorAuth(object):
 		return redirect("/")
 
 class WsgiDoorFilter(object):
-	"""WSGI middleware which requires the user to authenticate if he
-	tries to load one of the listed protect paths"""
+	"""This WSGI middleware requires the user to authenticate if he
+	tries to load one of the listed protect paths. It also sets
+	AUTH_TYPE and REMOTE_USER in the WSGI environment. Note that since
+	this reads the WSGI Door session cookie to figure out whether
+	the user is logged yes, it needs to go 'underneath' WsgiDoorAuth."""
 
 	def __init__(self, app, login_path="/auth/login/", denied_path="/auth/denied", protected_paths=[], allowed_groups=None):
 		self.app = app
@@ -232,7 +259,7 @@ class WsgiDoorFilter(object):
 
 	# Override to change the format of REMOTE_USER.
 	def build_remote_user(self, session):
-		if session['username']:
+		if session.get('username'):
 			return session['username']
 		else:
 			return "{provider}:{id}".format_map(session)
