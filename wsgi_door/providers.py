@@ -1,6 +1,6 @@
 from urllib.request import urlopen, Request
 from urllib.parse import urlencode, parse_qsl
-import urllib.error
+from urllib.error import HTTPError
 import json
 import jwt
 from secrets import token_hex
@@ -41,7 +41,7 @@ class AuthProviderOAuth1Base(object):
 		uri, headers, body = client.sign(self.request_token_url, http_method="POST")
 		try:
 			response = urlopen(Request(uri, headers=headers), data=b"")
-		except urllib.error.HTTPError as e:
+		except HTTPError as e:
 			return None
 		response_dict = dict(parse_qsl(response.read().decode("utf-8")))
 		session['oauth_token'] = response_dict.get('oauth_token')
@@ -65,7 +65,7 @@ class AuthProviderOAuth1Base(object):
 		uri, headers, body = client.sign(self.access_token_url, http_method="POST")
 		try:
 			response = urlopen(Request(uri, headers=headers), data=b"")
-		except urllib.error.HTTPError as e:
+		except HTTPError as e:
 			return dict(error="bad_response", error_description="HTTP request failed: %s %s" % (e.code, e.reason))
 		return dict(parse_qsl(response.read().decode("utf-8")))
 
@@ -154,7 +154,7 @@ class AuthProviderOAuth2Base(object):
 				# Some providers do not support JSON requests, so we have to use form encoding.
 				data=urlencode(form).encode('utf-8')
 				)	
-		except urllib.error.HTTPError as e:
+		except HTTPError as e:
 			#print(e.read())
 			return dict(error="bad_response", error_description="HTTP request failed: %s %s" % (e.code, e.reason))
 			
@@ -330,15 +330,21 @@ class AuthProviderAzure(AuthProviderOAuth2Base):
 		return groups
 
 	def get_profile_picture(self, access_token):
-		response = urlopen(
-			Request("https://graph.microsoft.com/v1.0/me/photo/$value",
+		request = Request("https://graph.microsoft.com/v1.0/me/photo/$value",
 	           	headers={
 					'Authorization': 'Bearer ' + access_token['access_token'],
 					'Accept':'image/jpeg',
 					'User-Agent':self.user_agent,
 					}
-				)
 			)
+		try:
+			response = urlopen(request)
+		except HTTPError as e:
+			logger.debug("Failed to get profile picture: %s" % e.code)
+			if e.code != 404:		# no profile picture
+				raise
+			return None
+			
 		content_type = response.info().get_content_type()
 		assert content_type == "image/jpeg" or content_type == "image/pjpeg", content_type
 		return response.read()
