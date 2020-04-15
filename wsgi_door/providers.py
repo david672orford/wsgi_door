@@ -340,7 +340,7 @@ class AuthProviderAzure(AuthProviderOAuth2Base):
 				)
 			)
 		content_type = response.info().get_content_type()
-		assert content_type == "image/pjpeg" or content_type == "image/pjpeg", content_type
+		assert content_type == "image/jpeg" or content_type == "image/pjpeg", content_type
 		return response.read()
 
 # https://www.linkedin.com/developers/apps/
