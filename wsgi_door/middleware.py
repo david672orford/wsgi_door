@@ -235,6 +235,7 @@ class WsgiDoorAuth(object):
 		# Forward the request to the underlying WSGI app so it can clean
 		# up its session, if it has one. Discard everything except the
 		# cookies it sets.
+		request.environ['wsgi_door'] = session
 		def start_response(status, headers):
 			for name, value in headers:
 				if name == 'Set-Cookie':
