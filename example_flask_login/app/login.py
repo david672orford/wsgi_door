@@ -1,4 +1,4 @@
-from flask import redirect
+from flask import redirect, request
 from flask_login import LoginManager
 from .models import db, User
 

@@ -258,7 +258,7 @@ class AuthProviderTwitter(AuthProviderOAuth1Base):
 	authorize_url = 'https://api.twitter.com/oauth/authenticate'
 	access_token_url = 'https://api.twitter.com/oauth/access_token'
 	profile_url = 'https://api.twitter.com/1.1/users/show.json?user_id={user_id}'
-	def get_normalize_profile(self, access_token, profile):
+	def normalize_profile(self, access_token, profile):
 		return dict(
 			id = access_token['user_id'],
 			username = access_token['screen_name'],
@@ -310,7 +310,7 @@ class AuthProviderAzure(AuthProviderOAuth2Base):
 			picture = None,
 			groups = self.get_groups(access_token)
 			)
-		# Most of the above is available from the ID token
+		# Most of the above is also available from the ID token
 		#id_token = access_token.get('id_token',{})
 		#return dict(
 		#	id = id_token['upd'],

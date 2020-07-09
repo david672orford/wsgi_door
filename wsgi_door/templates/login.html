@@ -3,15 +3,19 @@
 <head>
 <meta charset="utf-8">
 <title>Log in using...</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+{% if stylesheet_url %}<link rel="stylesheet" type="text/css" href="{{stylesheet_url}}"/>{% endif %}
 </head>
 <body>
-<h1>Log in using...</h1>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" type="text/css" href="{{stylesheet_url}}"/>
-<ul>
-{% for provider in providers %}
-<li><a href="{{provider}}">{{provider}}</a></li>
-{% endfor %}
-</ul>
+<header>
+	<h1>Log in using...</h1>
+</header>
+<main>
+	<ul>
+	{% for provider in providers %}
+		<li><a href="{{provider}}">{{provider}}</a></li>
+	{% endfor %}
+	</ul>
+</main>
 </body>
 </html>

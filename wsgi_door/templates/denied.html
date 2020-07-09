@@ -4,10 +4,12 @@
 <meta charset="utf-8">
 <title>Access Denied</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" type="text/css" href="{{stylesheet_url}}"/>
+{% if stylesheet_url %}<link rel="stylesheet" type="text/css" href="{{stylesheet_url}}"/>{% endif %}
 </head>
 <body>
-<h1>Access Denied</h1>
+<header>
+	<h1>Access Denied</h1>
+</header>
 <p>You are logged in as {{session['username']}}, but this account has
 not been granted access to this resource.</p>
 {% if session['groups'] %}
