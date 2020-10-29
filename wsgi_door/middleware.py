@@ -165,6 +165,9 @@ class WsgiDoorAuth(object):
 
 			# Forward the request down into the underlying WSGI app so that it can
 			# use the access_token if it needs to. Discard the result.
+			# Notice that we attach .provider, .access_token, and .raw_profile
+			# attributes to the session object. They will not be saved in the
+			# session cookie.
 			session.provider = provider
 			session.access_token = access_token
 			session.raw_profile = raw_profile

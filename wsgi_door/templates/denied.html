@@ -10,8 +10,12 @@
 <header>
 	<h1>Access Denied</h1>
 </header>
+
 <p>You are logged in as {{session['username']}}, but this account has
 not been granted access to this resource.</p>
+
+<p><a href="logout"><button>Log Out</button></a></p>
+
 {% if session['groups'] %}
 <h2>Your Group Memberships</h2>
 <ul>
@@ -20,5 +24,6 @@ not been granted access to this resource.</p>
 {% endfor %}
 </ul>
 {% endif %}
+
 </body>
 </html>

@@ -14,10 +14,8 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/david672orford/wsgi_door",
-    packages=setuptools.find_packages(),
-	package_data={
-		"wsgi_door":["templates/*.html"],
-	},
+    packages=['wsgi_door'],
+    package_data={"wsgi_door":["templates/*.html"]},
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
