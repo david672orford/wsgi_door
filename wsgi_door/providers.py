@@ -132,6 +132,7 @@ class AuthProviderOAuth2Base(object):
 			return dict(error="incorrect_state", error_description="The state value is not correct.")
 		del session['state']
 
+		# Build and send the access token request
 		form = dict(
 			code = request.args.get('code'),
 			client_id = self.client_id,
@@ -157,7 +158,8 @@ class AuthProviderOAuth2Base(object):
 		except HTTPError as e:
 			#print(e.read())
 			return dict(error="bad_response", error_description="HTTP request failed: %s %s" % (e.code, e.reason))
-			
+
+		# Parse the response to the access token request
 		content_type = response.info().get_content_type()
 		if content_type == 'application/json':
 			access_token = json.load(response)
@@ -166,7 +168,7 @@ class AuthProviderOAuth2Base(object):
 		else:
 			return dict(error="bad_response", error_description="Content-Type (%s) not supported." % content_type)
 
-		# If there is an id_token (OpenID Connect) included, decode it.
+		# If there is an id_token (OpenID Connect) included in the response, decode it.
 		if 'id_token' in access_token:
 			# FIXME: verify token
 			# This blog posting may be helpful:

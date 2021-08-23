@@ -72,7 +72,7 @@ class WsgiDoorAuth(object):
 			query = urlencode(kwargs),
 			)
 
-	# Handle an WSGI request
+	# Handle an HTTP requests
 	# We peel off requests to authentication pages and pass other requests
 	# through to the wrapped WSGI application.
 	def __call__(self, environ, start_response):
@@ -120,9 +120,9 @@ class WsgiDoorAuth(object):
 		raise NotFound()
 
 	# Browser has returned from the provider's login page. The query string
-	# should now contain an authorization code which we exchange for an access
-	# token. We use this to fetch the user's profile and store it in the
-	# session cookie.
+	# should now contain an authorization code which we will exchange for an
+	# access token. We use this to fetch the user's profile and store it in
+	# the session cookie.
 	def on_authorized(self, request, session, provider_name):
 		provider = self.auth_providers.get(provider_name)
 		if provider is not None:
@@ -251,11 +251,11 @@ class WsgiDoorAuth(object):
 		return response
 
 class WsgiDoorFilter(object):
-	"""This WSGI middleware requires the user to authenticate if he
+	"""This WSGI middleware requires the user to be authenticated whenever he
 	tries to load one of the listed protect paths. It also sets
 	AUTH_TYPE and REMOTE_USER in the WSGI environment. Note that since
 	this reads the WSGI Door session cookie to figure out whether
-	the user is logged yes, it needs to go 'underneath' WsgiDoorAuth."""
+	the user is logged in yet, it needs to go 'underneath' WsgiDoorAuth."""
 
 	def __init__(self, app, login_path="/auth/login/", denied_path="/auth/denied", protected_paths=[], allowed_groups=None):
 		self.wsgi_app = app
@@ -264,6 +264,7 @@ class WsgiDoorFilter(object):
 		self.protected_paths = protected_paths
 		self.allowed_groups = set(allowed_groups) if allowed_groups else None
 
+	# Handle HTTP requests
 	def __call__(self, environ, start_response):
 		session = environ[cookie_name]
 		request = Request(environ)
