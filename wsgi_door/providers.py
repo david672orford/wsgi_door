@@ -171,7 +171,8 @@ class AuthProviderOAuth2Base(object):
 			# FIXME: verify token
 			# This blog posting may be helpful:
 			# https://aboutsimon.com/blog/2017/12/05/Azure-ActiveDirectory-JWT-Token-Validation-With-Python.html
-			id_token = jwt.decode(access_token['id_token'], options={"verify_signature": False})
+			print("id_token:", access_token['id_token'])
+			id_token = jwt.decode(access_token['id_token'], options={"verify_signature": False, "verify_aud": False})
 			if id_token.get('aud') != self.client_id:
 				return dict(error="bad_id_token", error_description="The token was not intended for this service.")
 			access_token['id_token'] = id_token

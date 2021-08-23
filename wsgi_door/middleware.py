@@ -3,7 +3,10 @@ from werkzeug.wrappers import BaseRequest as Request, BaseResponse as Response
 from werkzeug.routing import Map, Rule
 from werkzeug.exceptions import NotFound
 from werkzeug.utils import redirect
-from werkzeug.contrib.securecookie import SecureCookie
+try:
+	from werkzeug.contrib.securecookie import SecureCookie
+except ImportError:
+	from secure_cookie.cookie import SecureCookie
 from jinja2 import Environment, FileSystemLoader
 import json
 from urllib.parse import urlencode, urlparse
