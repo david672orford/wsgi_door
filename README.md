@@ -1,29 +1,37 @@
+# WSGI\_Door
+
 This is an implementation of web authentication using services such as
 Google, Facebook, and Azure. Authentication is performed using OAuth
 and OAuth2.
+
+## Usage
 
 This authenticaton library takes the form of WSGI middleware. If you wrap your
 WSGI app (which includes Flask apps) in WsgiAuthDoor middleware, it will
 overlay a /auth/ directory. Within this directory are views for logging in
 using the configured providers and for logging out. For example:
 
-## /auth/login/
+### /auth/login/
+
 Display a list of the configured providers and let the user choose
 
-## /auth/login/google
+### /auth/login/google
+
 Log in using a Google account
 
-## /auth/login/azure
+### /auth/login/azure
+
 Log in using Microsoft Azure
 
-## /auth/logout
+### /auth/logout
+
 Destroy the session cookie
 
-# Redirect URL Format
+### Redirect URL Format
 
     https://*hostname*/auth/authorized/*provider*
 
-# Protecting Directories
+## Protecting Directories
 
 The WsgiAuthFilter middleware provides a simple way to specify which
 directories in your app should be protected. You should wrap your app with
@@ -32,7 +40,7 @@ user has attempted to access a protected page but is not logged in, it will
 redirect his browser to a login page in /auth/login/. There is an example
 in the example directory.
 
-# User Profile
+## User Profile
 
 Profile information about the logged-in user is available in the WSGI environment.
 For basic applications the name of the user is set as **REMOTE\_USER**.
@@ -53,7 +61,7 @@ The fields include:
 * email: the e-mail address of this user
 * groups: a list of groups to which this user belongs
 
-# Login Hook
+## Login Hook
 
 If you need even more information, you should create a login hook. The login
 hook takes the form of a URL in your application with the same path as the
@@ -75,12 +83,16 @@ you will have to provide this token as a parameter.
 the authentication provider's graph API. If .raw\_profile['groups'] is defined,
 it will include the descriptions of the groups.
 
-# Integration with Flask
+## Integration with Flask
 
 If you app uses Flask, you can use Flask-Login instead of WsgiAuthFilter.
 There is an example in the examples/flask\_login directory.
 
-# Changes
+## TODO
+
+* Reimplement the Twitter provider using OAuth2
+
+## Changes
 
 * In version 0.1 the value of **id** set by the Azure provider is *username*@*domain*.
   In version 0.2 it is the Azure user ID which is a string of random characters.

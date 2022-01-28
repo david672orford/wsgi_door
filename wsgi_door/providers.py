@@ -27,71 +27,71 @@ logger = logging.getLogger(__name__)
 # .)
 # We use Oauthlib to sign the requests.
 # https://oauth.net/core/1.0a/
-class AuthProviderOAuth1Base(object):
-	request_token_url = None
-	authorize_url = None
-	access_token_url = None
-	logout_url = None
-
-	def __init__(self, config):
-		self.client_id = config['client_id']
-		self.client_secret = config['client_secret']
-
-	def make_authorize_url(self, session, redirect_uri, extra_args):
-		import oauthlib.oauth1
-		client = oauthlib.oauth1.Client(
-			self.client_id,
-			client_secret = self.client_secret,
-			callback_uri = redirect_uri,
-			)
-		uri, headers, body = client.sign(self.request_token_url, http_method="POST")
-		try:
-			response = urlopen(Request(uri, headers=headers), data=b"")
-		except HTTPError as e:
-			return None
-		response_dict = dict(parse_qsl(response.read().decode("utf-8")))
-		session['oauth_token'] = response_dict.get('oauth_token')
-		session['oauth_token_secret'] = response_dict.get('oauth_token_secret')
-		# FIXME: extra_args ignored
-		return "%s?%s" % (self.authorize_url, urlencode(dict(oauth_token=response_dict.get('oauth_token'))))
-
-	def get_access_token(self, request, session, redirect_uri):
-		import oauthlib.oauth1
-		if not 'oauth_token' in session:
-			return dict(error="spurious_response", error_description="Browser was not expected to visit the redirect_uri.")
-		if request.args.get('oauth_token') != session['oauth_token']:
-			return dict(error="incorrect_state", error_description="The oauth_token value is not correct.")
-		client = oauthlib.oauth1.Client(
-			self.client_id,
-			client_secret = self.client_secret,
-			resource_owner_key = session.pop('oauth_token'),
-			resource_owner_secret = session.pop('oauth_token_secret'),
-			verifier = request.args.get('oauth_verifier'),
-			)
-		uri, headers, body = client.sign(self.access_token_url, http_method="POST")
-		try:
-			response = urlopen(Request(uri, headers=headers), data=b"")
-		except HTTPError as e:
-			return dict(error="bad_response", error_description="HTTP request failed: %s %s" % (e.code, e.reason))
-		return dict(parse_qsl(response.read().decode("utf-8")))
-
-	def get_profile(self, access_token):
-		import oauthlib.oauth1
-		if self.profile_url is not None:
-			client = oauthlib.oauth1.Client(
-				self.client_id,
-				client_secret = self.client_secret,
-				resource_owner_key = access_token['oauth_token'],
-				resource_owner_secret = access_token['oauth_token_secret'],
-				)
-
-			# FIXME: this is unsafe
-			uri = self.profile_url.format(**access_token)
-
-			uri, headers, body = client.sign(uri, http_method="GET")
-			response = urlopen(Request(uri, headers=headers))
-			return json.load(response)
-		return None
+#class AuthProviderOAuth1Base(object):
+#	request_token_url = None
+#	authorize_url = None
+#	access_token_url = None
+#	logout_url = None
+#
+#	def __init__(self, config):
+#		self.client_id = config['client_id']
+#		self.client_secret = config['client_secret']
+#
+#	def make_authorize_url(self, session, redirect_uri, extra_args):
+#		import oauthlib.oauth1
+#		client = oauthlib.oauth1.Client(
+#			self.client_id,
+#			client_secret = self.client_secret,
+#			callback_uri = redirect_uri,
+#			)
+#		uri, headers, body = client.sign(self.request_token_url, http_method="POST")
+#		try:
+#			response = urlopen(Request(uri, headers=headers), data=b"")
+#		except HTTPError as e:
+#			return None
+#		response_dict = dict(parse_qsl(response.read().decode("utf-8")))
+#		session['oauth_token'] = response_dict.get('oauth_token')
+#		session['oauth_token_secret'] = response_dict.get('oauth_token_secret')
+#		# FIXME: extra_args ignored
+#		return "%s?%s" % (self.authorize_url, urlencode(dict(oauth_token=response_dict.get('oauth_token'))))
+#
+#	def get_access_token(self, request, session, redirect_uri):
+#		import oauthlib.oauth1
+#		if not 'oauth_token' in session:
+#			return dict(error="spurious_response", error_description="Browser was not expected to visit the redirect_uri.")
+#		if request.args.get('oauth_token') != session['oauth_token']:
+#			return dict(error="incorrect_state", error_description="The oauth_token value is not correct.")
+#		client = oauthlib.oauth1.Client(
+#			self.client_id,
+#			client_secret = self.client_secret,
+#			resource_owner_key = session.pop('oauth_token'),
+#			resource_owner_secret = session.pop('oauth_token_secret'),
+#			verifier = request.args.get('oauth_verifier'),
+#			)
+#		uri, headers, body = client.sign(self.access_token_url, http_method="POST")
+#		try:
+#			response = urlopen(Request(uri, headers=headers), data=b"")
+#		except HTTPError as e:
+#			return dict(error="bad_response", error_description="HTTP request failed: %s %s" % (e.code, e.reason))
+#		return dict(parse_qsl(response.read().decode("utf-8")))
+#
+#	def get_profile(self, access_token):
+#		import oauthlib.oauth1
+#		if self.profile_url is not None:
+#			client = oauthlib.oauth1.Client(
+#				self.client_id,
+#				client_secret = self.client_secret,
+#				resource_owner_key = access_token['oauth_token'],
+#				resource_owner_secret = access_token['oauth_token_secret'],
+#				)
+#
+#			# FIXME: this is unsafe
+#			uri = self.profile_url.format(**access_token)
+#
+#			uri, headers, body = client.sign(uri, http_method="GET")
+#			response = urlopen(Request(uri, headers=headers))
+#			return json.load(response)
+#		return None
 
 # Base class for providers which implement OAuth version 2
 # https://oauth.net/2/
@@ -281,20 +281,20 @@ class AuthProviderFacebook(AuthProviderOAuth2Base):
 			)
 
 # https://developer.twitter.com/en/apps
-class AuthProviderTwitter(AuthProviderOAuth1Base):
-	request_token_url = 'https://api.twitter.com/oauth/request_token'
-	authorize_url = 'https://api.twitter.com/oauth/authenticate'
-	access_token_url = 'https://api.twitter.com/oauth/access_token'
-	profile_url = 'https://api.twitter.com/1.1/users/show.json?user_id={user_id}'
-	def normalize_profile(self, access_token, profile):
-		return dict(
-			id = access_token['user_id'],
-			username = access_token['screen_name'],
-			name = None,
-			email = None,
-			picture = profile['profile_image_url_https'],
-			groups = None,
-			)
+#class AuthProviderTwitter(AuthProviderOAuth1Base):
+#	request_token_url = 'https://api.twitter.com/oauth/request_token'
+#	authorize_url = 'https://api.twitter.com/oauth/authenticate'
+#	access_token_url = 'https://api.twitter.com/oauth/access_token'
+#	profile_url = 'https://api.twitter.com/1.1/users/show.json?user_id={user_id}'
+#	def normalize_profile(self, access_token, profile):
+#		return dict(
+#			id = access_token['user_id'],
+#			username = access_token['screen_name'],
+#			name = None,
+#			email = None,
+#			picture = profile['profile_image_url_https'],
+#			groups = None,
+#			)
 
 # https://github.com/settings/apps
 class AuthProviderGithub(AuthProviderOAuth2Base):
@@ -461,7 +461,7 @@ class AuthProviderReddit(AuthProviderOAuth2Base):
 default_auth_providers = {
 	'google': AuthProviderGoogle,
 	'facebook': AuthProviderFacebook,
-	'twitter': AuthProviderTwitter,
+	#'twitter': AuthProviderTwitter,
 	'github': AuthProviderGithub,
 	'azure': AuthProviderAzure,
 	'linkedin': AuthProviderLinkedin,
