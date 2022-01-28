@@ -5,9 +5,11 @@ import setuptools
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
+from wsgi_door.version import __version__
+
 setuptools.setup(
     name="wsgi_door",
-    version="0.1",
+    version=__version__,
     author="David Chappell",
     author_email="David.Chappell@trincoll.edu",
     description="WSGI Middleware which provides OAuth2 authentication",
@@ -25,6 +27,7 @@ setuptools.setup(
 	install_requires=[
 		'PyJWT',
 		'Werkzeug',
+		'Secure-Cookie',
 	],
 )
 

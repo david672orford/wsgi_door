@@ -1,4 +1,8 @@
 import json
+
+# Bare-bones WSGI app for demonstration purposes
+# No matter what page you request, it shows you page page with the
+# username and user profile.
 def app(environ, start_response):
 	start_response("200 OK", [("Content-Type", "text/plain;charset=utf-8")])
 	greeting = "Hello, %s (%s)!\n\n" % (environ.get('REMOTE_USER'), environ.get('AUTH_TYPE'))

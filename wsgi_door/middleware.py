@@ -1,6 +1,6 @@
 import os
 from werkzeug.wrappers import BaseRequest as Request, BaseResponse as Response
-from werkzeug.routing import Map, Rule
+from werkzeug.routing import Map, Rule, RequestRedirect
 from werkzeug.exceptions import NotFound
 from werkzeug.utils import redirect
 try:
@@ -83,15 +83,18 @@ class WsgiDoorAuth(object):
 		adapter = self.url_map.bind_to_environ(request.environ)
 		response = None
 		try:
-			endpoint, values = adapter.match()
-			response = getattr(self, endpoint)(request, session, **values)
+			try:
+				endpoint, values = adapter.match()
+				response = getattr(self, endpoint)(request, session, **values)
+			except RequestRedirect as e:
+				response = e
 			session.save_cookie(response, key=cookie_name, httponly=True, secure=True)
 			return response(environ, start_response)
 		except NotFound:
 			pass
 
-		# If we reach this point, it is not one of our URLs. We pass it
-		# thru to the wrapped WSGI application.
+		# If we reach this point, the requested URL is not one of ours.
+		# Pass it thru to the wrapped WSGI application.
 		environ['wsgi_door'] = session
 		return self.wsgi_app(environ, start_response)
 
@@ -141,7 +144,8 @@ class WsgiDoorAuth(object):
 			if 'error' in access_token:
 				return redirect(self.error_url(request, provider_name, error=access_token.get('error'), error_description=access_token.get('error_description')))
 
-			# Get the user's profile
+			# Get the user's profile in a provider-specific manner
+			# (likely by calling its graph API).
 			try:
 				raw_profile = provider.get_profile(access_token)
 			except Exception as e:
@@ -150,8 +154,9 @@ class WsgiDoorAuth(object):
 
 			logger.debug("raw profile: %s" % json.dumps(raw_profile, indent=4, sort_keys=True))
 
-			# Every provider has its own format for the user profile. Call a custom
-			# function to extract what we need to create a normalized profile.
+			# Every provider has its own format for the user profile. Call a provider-
+			# specific function to extract what we need to create a normalized profile
+			# which will go into the session cookie.
 			try:
 				profile = provider.normalize_profile(access_token, raw_profile)
 			except Exception as e:
@@ -166,11 +171,8 @@ class WsgiDoorAuth(object):
 			session['provider'] = provider_name
 			session.update(profile)
 
-			# Forward the request down into the underlying WSGI app so that it can
-			# use the access_token if it needs to. Discard the result.
-			# Notice that we attach .provider, .access_token, and .raw_profile
-			# attributes to the session object. They will not be saved in the
-			# session cookie.
+			# Piggyback various things onto the session cookie object and
+			# call the login hook. Ignore the result code.
 			session.provider = provider
 			session.access_token = access_token
 			session.raw_profile = raw_profile

@@ -6,7 +6,9 @@ import jwt
 from secrets import token_hex
 import gzip
 from base64 import b64encode
+from operator import itemgetter
 import logging
+from .version import __version__
 
 # References
 # https://oauth.net/articles/authentication/
@@ -19,6 +21,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Base class for providers which still use OAuth version 1
+# (The one we know of is Twitter. As of January 2022 it appears they have
+# implemented OAuth2, so we should probably drop this. See:
+# https://developer.twitter.com/en/docs/authentication/oauth-2-0/authorization-code
+# .)
 # We use Oauthlib to sign the requests.
 # https://oauth.net/core/1.0a/
 class AuthProviderOAuth1Base(object):
@@ -27,9 +33,9 @@ class AuthProviderOAuth1Base(object):
 	access_token_url = None
 	logout_url = None
 
-	def __init__(self, keys):
-		self.client_id = keys['client_id']
-		self.client_secret = keys['client_secret']
+	def __init__(self, config):
+		self.client_id = config['client_id']
+		self.client_secret = config['client_secret']
 
 	def make_authorize_url(self, session, redirect_uri, extra_args):
 		import oauthlib.oauth1
@@ -78,29 +84,30 @@ class AuthProviderOAuth1Base(object):
 				resource_owner_key = access_token['oauth_token'],
 				resource_owner_secret = access_token['oauth_token_secret'],
 				)
+
 			# FIXME: this is unsafe
 			uri = self.profile_url.format(**access_token)
+
 			uri, headers, body = client.sign(uri, http_method="GET")
 			response = urlopen(Request(uri, headers=headers))
 			return json.load(response)
 		return None
 
-# Base class for providers which use OAuth version 2
+# Base class for providers which implement OAuth version 2
 # https://oauth.net/2/
 class AuthProviderOAuth2Base(object):
 	authorize_url = None
-	authorize_args = {}
+	default_scope = None
 	access_token_url = None
-	access_token_args = {}
 	profile_url = None
 	logout_url = None
-	user_agent = 'wsgi_door:v0.1'
+	user_agent = 'WSGI-Door/' + __version__
 
-	def __init__(self, keys):
-		self.keys = keys
-		self.client_id = keys['client_id']
-		self.client_secret = keys['client_secret']
-		self.config = keys
+	def __init__(self, config):
+		self.config = config
+		self.client_id = config['client_id']
+		self.client_secret = config['client_secret']
+		self.scope = config.get('scope', self.default_scope)
 
 	# Build the URL to which the user's browser should be redirected to reach
 	# the authentication provider's login page.
@@ -112,15 +119,16 @@ class AuthProviderOAuth2Base(object):
 			response_type = 'code',
 			state = state,
 			)
-		query.update(self.authorize_args)
+		if self.scope is not None:
+			query["scope"] = self.scope
 		query.update(extra_args)			# from /auth/login query string
 		return '{authorize_url}?{query}'.format(
 			authorize_url=self.authorize_url.format_map(self.config),
 			query=urlencode(query)
 			)
 
-	# Called when the browser gets redirected back to our site. Contact the
-	# authentication provider directly and ask for an access_token.
+	# Called when the browser gets redirected back to our site. We send an
+	# HTTP request to the authentication provider directly asking for an access_token.
 	# Along with the access token we may receive other information such as
 	# an OpenID Connect assertion (id_token) encoded in JWT format.
 	def get_access_token(self, request, session, redirect_uri):
@@ -133,14 +141,24 @@ class AuthProviderOAuth2Base(object):
 		del session['state']
 
 		# Build and send the access token request
-		form = dict(
+		return self.send_access_token_request(
 			code = request.args.get('code'),
 			client_id = self.client_id,
 			client_secret = self.client_secret,
 			redirect_uri = redirect_uri,
 			grant_type = 'authorization_code',
 			)
-		form.update(self.access_token_args)
+
+	def refresh_access_token(self, access_token):
+		return self.send_access_token_request(
+			grant_type = 'refresh_token',
+			refresh_token = access_token['refresh_token'],
+			client_id = self.client_id,
+			client_secret = self.client_secret,
+			scope = self.scope,
+			)
+
+	def send_access_token_request(self, **form):
 		try:
 			response = urlopen(
 				Request(self.access_token_url.format_map(self.config),
@@ -173,7 +191,7 @@ class AuthProviderOAuth2Base(object):
 			# FIXME: verify token
 			# This blog posting may be helpful:
 			# https://aboutsimon.com/blog/2017/12/05/Azure-ActiveDirectory-JWT-Token-Validation-With-Python.html
-			print("id_token:", access_token['id_token'])
+			logger.debug("id_token: %s", access_token['id_token'])
 			id_token = jwt.decode(access_token['id_token'], options={"verify_signature": False, "verify_aud": False})
 			if id_token.get('aud') != self.client_id:
 				return dict(error="bad_id_token", error_description="The token was not intended for this service.")
@@ -208,15 +226,20 @@ class AuthProviderOAuth2Base(object):
 	def get_profile(self, access_token):
 		if self.profile_url is None:
 			return None
-		return self.get_json(self.profile_url, access_token)
+		profile = self.get_json(self.profile_url, access_token)
+		profile['groups'] = self.get_groups(access_token)
+		return profile
+
+	def get_groups(self, access_token):
+		return None
 
 	# Extract standard user profile information from the information included
 	# with the access token. If it is not enough, call .get_profile().
 	# This is a stub which should be overriden in derived classes.
 	def normalize_profile(self, access_token, profile):
-		print("No profile normalizer defined for this provider")
-		print("access_token:", json.dumps(access_token, indent=4, sort_keys=True))
-		print("profile:", json.dumps(profile, indent=4, sort_keys=True))
+		logger.warning("No profile normalizer defined for this provider")
+		logger.warning("access_token: %s", json.dumps(access_token, indent=4, sort_keys=True))
+		logger.warning("profile: %s", json.dumps(profile, indent=4, sort_keys=True))
 		return dict(
 			id = None,
 			username = None,
@@ -229,7 +252,7 @@ class AuthProviderOAuth2Base(object):
 class AuthProviderGoogle(AuthProviderOAuth2Base):
 	authorize_url = 'https://accounts.google.com/o/oauth2/auth'
 	access_token_url = 'https://accounts.google.com/o/oauth2/token'
-	authorize_args = {'scope': 'openid profile email'}
+	default_scope = 'openid profile email'
 	profile_url = 'https://www.googleapis.com/oauth2/v1/userinfo?alt=json'
 	def normalize_profile(self, access_token, profile):
 		id_token = access_token['id_token']
@@ -245,7 +268,7 @@ class AuthProviderGoogle(AuthProviderOAuth2Base):
 class AuthProviderFacebook(AuthProviderOAuth2Base):
 	authorize_url = 'https://www.facebook.com/dialog/oauth'
 	access_token_url = 'https://graph.facebook.com/oauth/access_token'
-	authorize_args = {'scope': 'email'}
+	default_scope = 'email'
 	profile_url = 'https://graph.facebook.com/v1.0/me'
 	def normalize_profile(self, access_token, profile):
 		return dict(
@@ -277,7 +300,7 @@ class AuthProviderTwitter(AuthProviderOAuth1Base):
 class AuthProviderGithub(AuthProviderOAuth2Base):
 	authorize_url = 'https://github.com/login/oauth/authorize'
 	access_token_url = 'https://github.com/login/oauth/access_token'
-	authorize_args = {'scope': 'openid email'}
+	default_scope = 'openid email'
 	profile_url = 'https://api.github.com/user'
 	def normalize_profile(self, access_token, profile):
 		return dict(
@@ -293,6 +316,9 @@ class AuthProviderGithub(AuthProviderOAuth2Base):
 # (Not to be confused with Azure Active Directory v1.0 which is Microsoft's
 # prior OAUTH2 implementation.)
 #
+# Authentication procedure:
+# https://docs.microsoft.com/en-us/azure/active-directory/develop/v2-oauth2-auth-code-flow
+#
 # To register your application, go the Azure Portal:
 #  https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade
 #  Redirect URL:
@@ -301,37 +327,31 @@ class AuthProviderGithub(AuthProviderOAuth2Base):
 #    https://example.com/auth/logout
 class AuthProviderAzure(AuthProviderOAuth2Base):
 	authorize_url = 'https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize'
-	authorize_args = {'scope': 'openid user.read Directory.Read.All'}
+	default_scope = 'openid user.read Directory.Read.All'
 	access_token_url = 'https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token'
 	profile_url = 'https://graph.microsoft.com/v1.0/me'
 	logout_url = "https://login.microsoftonline.com/{client_id}/oauth2/logout?post_logout_redirect_uri={logged_out_url}"
 
 	def normalize_profile(self, access_token, profile):
 		return dict(
-			id = profile['userPrincipalName'],
+			id = profile['id'],
 			username = profile['userPrincipalName'],
 			name = profile['displayName'],
 			email = profile['mail'],
 			picture = None,
-			groups = self.get_groups(access_token)
+			groups = list(map(itemgetter(0), profile['groups']))
 			)
-		# Most of the above is also available from the ID token
-		#id_token = access_token.get('id_token',{})
-		#return dict(
-		#	id = id_token['upd'],
-		#	username = id_token['upn'],
-		#	name = id_token['name'],
-		#	email = None,
-		#	picture = None,
-		#	groups = self.get_groups(access_token)
-		#	)
 
+	# Get a list of groups of which this user is a member. Each group
+	# is a (name, description) tuple. The description is dropt by
+	# normalize_profile() above so as not to exceed cookie size limits,
+	# but you can inspect it if you hook /auth/authorized/<provider>.
 	def get_groups(self, access_token):
 		response = self.get_json('https://graph.microsoft.com/v1.0/me/memberOf', access_token)
 		logger.debug("raw groups: %s" % json.dumps(response, indent=4, sort_keys=True))
 		groups = []
 		for group in response['value']:
-			groups.append(group['displayName'])
+			groups.append((group['displayName'], group['description']))
 		return groups
 
 	def get_profile_picture(self, access_token):
@@ -360,9 +380,8 @@ class AuthProviderLinkedin(AuthProviderOAuth2Base):
 	authorize_url =    'https://www.linkedin.com/oauth/v2/authorization'
 	access_token_url = 'https://www.linkedin.com/oauth/v2/accessToken'
 	profile_url = 'https://api.linkedin.com/v2/me'
-	authorize_args = {'scope': 'r_liteprofile r_basicprofile r_emailaddress'}
+	default_scope = 'r_liteprofile r_basicprofile r_emailaddress'
 	def normalize_profile(self, access_token, profile):
-		print("profile:", profile)
 		return dict(
 			id = profile['id'],
 			username = None,
@@ -376,7 +395,7 @@ class AuthProviderPinterest(AuthProviderOAuth2Base):
 	authorize_url = 'https://api.pinterest.com/oauth/'
 	access_token_url = 'https://api.pinterest.com/v1/oauth/token'
 	profile_url = 'https://api.pinterest.com/v1/me/'
-	authorize_args = {'scope': 'read_public'}
+	default_scope = 'read_public'
 	def normalize_profile(self, access_token, profile):
 		profile = profile['data']
 		return dict(
@@ -393,7 +412,7 @@ class AuthProviderWordpress(AuthProviderOAuth2Base):
 	authorize_url = 'https://public-api.wordpress.com/oauth2/authorize'
 	access_token_url = 'https://public-api.wordpress.com/oauth2/token'
 	profile_url = 'https://public-api.wordpress.com/rest/v1/me'
-	authorize_args = {'scope': 'auth'}
+	default_scope = 'auth'
 	def normalize_profile(self, access_token, profile):
 		return dict(
 			id = str(profile['ID']),
@@ -410,7 +429,7 @@ class AuthProviderStackexchange(AuthProviderOAuth2Base):
 	access_token_url = 'https://stackoverflow.com/oauth/access_token'
 	profile_url = 'https://api.stackexchange.com/2.2/me'
 	def get_profile(self, access_token):
-		return self.get_json(self.profile_url, access_token, site='stackoverflow', key=self.keys['request_key'], access_token=access_token['access_token'])
+		return self.get_json(self.profile_url, access_token, site='stackoverflow', key=self.config['request_key'], access_token=access_token['access_token'])
 	def normalize_profile(self, access_token, profile):
 		profile = profile['items'][0]
 		return dict(
@@ -428,7 +447,7 @@ class AuthProviderReddit(AuthProviderOAuth2Base):
 	authorize_url = 'https://www.reddit.com/api/v1/authorize.compact'
 	access_token_url = 'https://www.reddit.com/api/v1/access_token'
 	profile_url = 'https://oauth.reddit.com/api/v1/me'
-	authorize_args = {'scope': 'identity'}
+	default_scope = 'identity'
 	def normalize_profile(self, access_token, profile):
 		return dict(
 			id = profile['id'],
