@@ -139,7 +139,6 @@ class WsgiDoorAuth(object):
 			# Get the access token
 			callback_url = self.callback_url(request, provider_name)
 			access_token = provider.get_access_token(request, session, callback_url)
-			logger.debug("access_token: %s" % str(access_token))
 
 			if 'error' in access_token:
 				return redirect(self.error_url(request, provider_name, error=access_token.get('error'), error_description=access_token.get('error_description')))
@@ -149,7 +148,7 @@ class WsgiDoorAuth(object):
 			try:
 				raw_profile = provider.get_profile(access_token)
 			except Exception as e:
-				logger.debug("access_token: %s" % json.dumps(access_token, indent=4, ensure_ascii=False))
+				logger.error("Profile fetch failed: %s" % str(e))
 				return redirect(self.error_url(request, provider_name, error='profile_fetch_failed', error_description=str(e)))
 
 			logger.debug("raw profile: %s" % json.dumps(raw_profile, indent=4, sort_keys=True))

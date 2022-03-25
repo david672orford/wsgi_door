@@ -1,6 +1,7 @@
-from urllib.request import urlopen, Request
+from urllib.request import Request, build_opener, HTTPSHandler
 from urllib.parse import urlencode, parse_qsl
 from urllib.error import HTTPError
+import ssl
 import json
 import jwt
 from secrets import token_hex
@@ -13,10 +14,6 @@ from .version import __version__
 # References
 # https://oauth.net/articles/authentication/
 # https://stackoverflow.com/questions/2138656/signing-requests-in-python-for-oauth
-
-# Uncomment to enable debugging of communication with the authentication provider.
-#import urllib.request
-#urllib.request.install_opener(urllib.request.build_opener(urllib.request.HTTPSHandler(debuglevel=1)))
 
 logger = logging.getLogger(__name__)
 
@@ -97,10 +94,12 @@ logger = logging.getLogger(__name__)
 # https://oauth.net/2/
 class AuthProviderOAuth2Base(object):
 	authorize_url = None
-	default_scope = None
 	access_token_url = None
 	profile_url = None
 	logout_url = None
+	default_scope = None
+	authorize_args = {}                                                                    
+	access_token_args = {}                                                                 
 	user_agent = 'WSGI-Door/' + __version__
 
 	def __init__(self, config):
@@ -108,6 +107,7 @@ class AuthProviderOAuth2Base(object):
 		self.client_id = config['client_id']
 		self.client_secret = config['client_secret']
 		self.scope = config.get('scope', self.default_scope)
+		self.urlopener = build_opener(HTTPSHandler(context=ssl.create_default_context(), debuglevel=self.config.get('debuglevel',0)))
 
 	# Build the URL to which the user's browser should be redirected to reach
 	# the authentication provider's login page.
@@ -121,6 +121,7 @@ class AuthProviderOAuth2Base(object):
 			)
 		if self.scope is not None:
 			query["scope"] = self.scope
+		query.update(self.authorize_args)
 		query.update(extra_args)			# from /auth/login query string
 		return '{authorize_url}?{query}'.format(
 			authorize_url=self.authorize_url.format_map(self.config),
@@ -141,13 +142,15 @@ class AuthProviderOAuth2Base(object):
 		del session['state']
 
 		# Build and send the access token request
-		return self.send_access_token_request(
+		query = dict(
 			code = request.args.get('code'),
 			client_id = self.client_id,
 			client_secret = self.client_secret,
 			redirect_uri = redirect_uri,
 			grant_type = 'authorization_code',
 			)
+		query.update(self.access_token_args)
+		return self.send_access_token_request(**query)
 
 	def refresh_access_token(self, access_token):
 		return self.send_access_token_request(
@@ -160,7 +163,7 @@ class AuthProviderOAuth2Base(object):
 
 	def send_access_token_request(self, **form):
 		try:
-			response = urlopen(
+			response = self.urlopener.open(
 				Request(self.access_token_url.format_map(self.config),
 					headers={
 						'Content-Type':'application/x-www-form-urlencoded',
@@ -186,12 +189,13 @@ class AuthProviderOAuth2Base(object):
 		else:
 			return dict(error="bad_response", error_description="Content-Type (%s) not supported." % content_type)
 
+		logger.debug("access_token: %s", json.dumps(access_token, indent=2, ensure_ascii=False))
+
 		# If there is an id_token (OpenID Connect) included in the response, decode it.
 		if 'id_token' in access_token:
 			# FIXME: verify token
 			# This blog posting may be helpful:
 			# https://aboutsimon.com/blog/2017/12/05/Azure-ActiveDirectory-JWT-Token-Validation-With-Python.html
-			logger.debug("id_token: %s", access_token['id_token'])
 			id_token = jwt.decode(access_token['id_token'], options={"verify_signature": False, "verify_aud": False})
 			if id_token.get('aud') != self.client_id:
 				return dict(error="bad_id_token", error_description="The token was not intended for this service.")
@@ -203,7 +207,7 @@ class AuthProviderOAuth2Base(object):
 	def get_json(self, url, access_token_dict, **kwargs):
 		if len(kwargs.keys()):
 			url = url + "?" + urlencode(kwargs)
-		response = urlopen(
+		response = self.urlopener.open(
 			Request(url,
 	           	headers={
 					'Authorization': 'Bearer ' + access_token_dict['access_token'],
@@ -363,7 +367,7 @@ class AuthProviderAzure(AuthProviderOAuth2Base):
 					}
 			)
 		try:
-			response = urlopen(request)
+			response = self.urlopener.open(request)
 		except HTTPError as e:
 			logger.debug("Failed to get profile picture: %s" % e.code)
 			if e.code != 404:		# no profile picture
