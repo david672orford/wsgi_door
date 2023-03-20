@@ -259,11 +259,12 @@ class WsgiDoorFilter(object):
 	this reads the WSGI Door session cookie to figure out whether
 	the user is logged in yet, it needs to go 'underneath' WsgiDoorAuth."""
 
-	def __init__(self, app, login_path="/auth/login/", denied_path="/auth/denied", protected_paths=[], allowed_groups=None):
+	def __init__(self, app, login_path="/auth/login/", denied_path="/auth/denied", protected_paths=[], protected_path_exceptions=[], allowed_groups=None):
 		self.wsgi_app = app
 		self.login_path = login_path
 		self.denied_path = denied_path
 		self.protected_paths = protected_paths
+		self.protected_path_exceptions = protected_path_exceptions
 		self.allowed_groups = set(allowed_groups) if allowed_groups else None
 
 	# Handle HTTP requests
@@ -293,6 +294,9 @@ class WsgiDoorFilter(object):
 	def path_is_protected(self, path):
 		for protected_path in self.protected_paths:
 			if path.startswith(protected_path):
+				for protected_path_exception in self.protected_path_exceptions:
+					if path.startswith(protected_path_exception):
+						return False
 				return True
 		return False
 
