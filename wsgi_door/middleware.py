@@ -21,11 +21,11 @@ logger = logging.getLogger(__name__)
 class JSONSecureCookie(SecureCookie):
 	"""Object representing the login session cookie"""
 	serialization_method = json
-	def set_next_url(self, response, next_url):
+	def set_next_url(self, response, next_url, secure=True):
 		"""Add the URL to redirect to after login to the session and set the session
 		cookie in the response object provided"""
 		self['next'] = next_url
-		self.save_cookie(response, cookie_name, httponly=True, secure=True)
+		self.save_cookie(response, cookie_name, httponly=True, secure=secure)
 
 class WsgiDoorAuth(object):
 	"""WSGI middleware which inserts authentication using the specified providers"""
@@ -89,7 +89,8 @@ class WsgiDoorAuth(object):
 				response = getattr(self, endpoint)(request, session, **values)
 			except RequestRedirect as e:
 				response = e
-			session.save_cookie(response, key=cookie_name, httponly=True, secure=True)
+			localhost = request.host.split(":")[0] == "localhost"
+			session.save_cookie(response, key=cookie_name, httponly=True, secure=(not localhost))
 			return response(environ, start_response)
 		except NotFound:
 			pass
@@ -272,14 +273,15 @@ class WsgiDoorFilter(object):
 		session = environ[cookie_name]
 		request = Request(environ)
 		if self.path_is_protected(request.path):
+			localhost = request.host.split(":")[0] == "localhost"
 			# Protected paths may only be accessed over HTTPS
-			if request.scheme != "https":
+			if request.scheme != "https" and not localhost:
 				response = redirect("https://{host}{path}".format(host=request.host, path=request.path))
 				return response(environ, start_response)
 			# If user is not logged in,
 			if not 'provider' in session:
 				response = redirect(self.login_path)
-				session.set_next_url(response, request.path)
+				session.set_next_url(response, request.path, secure=(not localhost))
 				return response(environ, start_response)
 			# If user is logged in but not authorized,
 			if not self.user_is_allowed(session):

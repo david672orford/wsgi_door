@@ -94,6 +94,8 @@ There is an example in the examples/flask\_login directory.
 
 ## Changes
 
+### Version 0.2
+
 * In version 0.1 the value of **id** set by the Azure provider is *username*@*domain*.
   In version 0.2 it is the Azure user ID which is a string of random characters.
 * Starting in version 0.2 the version can be read from wsgi\_door.__version__.
@@ -101,4 +103,8 @@ There is an example in the examples/flask\_login directory.
 * Starting in version 0.2 you can include the desired scopes in the configuration
   dict for a provider.
 
+### Version 0.21
+
+* In version 0.21 http://localhost URLs are no longer redirected to HTTPS. Cookies
+  return to localhost are no longer marked HTTPS-only. This is to support local apps.
 
