@@ -11,21 +11,17 @@ WSGI app (which includes Flask apps) in WsgiAuthDoor middleware, it will
 overlay a /auth/ directory. Within this directory are views for logging in
 using the configured providers and for logging out. For example:
 
-### /auth/login/
+/auth/login/
+: Display a list of the configured providers and let the user choose
 
-Display a list of the configured providers and let the user choose
+/auth/login/google
+: Log in using a Google account
 
-### /auth/login/google
+/auth/login/azure
+: Log in using Microsoft Azure
 
-Log in using a Google account
-
-### /auth/login/azure
-
-Log in using Microsoft Azure
-
-### /auth/logout
-
-Destroy the session cookie
+/auth/logout
+: Destroy the session cookie
 
 ### Redirect URL Format
 
