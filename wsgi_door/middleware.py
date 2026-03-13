@@ -314,13 +314,14 @@ class WsgiDoorFilter(object):
 		else:
 			return "{provider}:{id}".format_map(session)
 
-class WsgiGroups:
+class WsgiLocalGroups:
+	"""Local groups for testing purposes"""
 	def __init__(self, app, groups):
 		self.wsgi_app = app
 		self.groups = groups
 	def __call__(self, environ, start_response):
 		session = environ[cookie_name]
-		key = ":".join((environ["AUTH_TYPE"], environ["REMOTE_USER"]))
+		key = "{provider}:{username}".format_map(session)
 		for name, values in self.groups:
 			if key in values:
 				session["groups"].append(name)		
