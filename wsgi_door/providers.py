@@ -250,7 +250,7 @@ class AuthProviderOAuth2Base(object):
 			name = None,
 			email = None,
 			picture = None,
-			groups = None,
+			groups = [],
 			)
 
 # https://console.developers.google.com/
@@ -267,7 +267,7 @@ class AuthProviderGoogle(AuthProviderOAuth2Base):
 			name = profile["name"],
 			email = id_token["email"],
 			picture = profile["picture"],
-			groups = None,
+			groups = [],
 			)
 
 # https://developers.facebook.com
@@ -283,7 +283,7 @@ class AuthProviderFacebook(AuthProviderOAuth2Base):
 			name = profile["name"],
 			email = None,
 			picture = None,
-			groups = None,
+			groups = [],
 			)
 
 # https://developer.twitter.com/en/apps
@@ -299,7 +299,7 @@ class AuthProviderFacebook(AuthProviderOAuth2Base):
 #			name = None,
 #			email = None,
 #			picture = profile['profile_image_url_https'],
-#			groups = None,
+#			groups = [],
 #			)
 
 # https://github.com/settings/developers
@@ -315,7 +315,7 @@ class AuthProviderGithub(AuthProviderOAuth2Base):
 			name = profile["name"],
 			email = profile["email"],		# may be None
 			picture = profile["avatar_url"],
-			groups = None,
+			groups = [],
 			)
 
 # Microsoft Identity Platform v2.0
@@ -394,7 +394,7 @@ class AuthProviderLinkedin(AuthProviderOAuth2Base):
 			name = "%s %s" % (profile["localizedFirstName"], profile["localizedLastName"]),
 			email = None,
 			picture = None,
-			groups = None,
+			groups = [],
 			)
 
 # https://developers.pinterest.com/apps/
@@ -411,7 +411,7 @@ class AuthProviderPinterest(AuthProviderOAuth2Base):
 			name = "%s %s" % (profile["first_name"], profile["last_name"]),
 			email = None,
 			picture = None,
-			groups = None,
+			groups = [],
 			)
 
 # https://developer.wordpress.com/apps/
@@ -427,7 +427,7 @@ class AuthProviderWordpress(AuthProviderOAuth2Base):
 			name = None,
 			email = profile["email"],
 			picture = profile["avatar_URL"],
-			groups = None,
+			groups = [],
 			)
 
 # https://stackapps.com/apps/oauth/
@@ -444,7 +444,7 @@ class AuthProviderStackexchange(AuthProviderOAuth2Base):
 			username = profile["display_name"],
 			name = None,
 			picture = profile["profile_image"],
-			groups = None,
+			groups = [],
 			)
 
 # https://www.reddit.com/prefs/apps
@@ -462,7 +462,7 @@ class AuthProviderReddit(AuthProviderOAuth2Base):
 			name = None,
 			email = None,
 			picture = profile["icon_img"],
-			groups = None,
+			groups = [],
 			)
 
 default_auth_providers = {
