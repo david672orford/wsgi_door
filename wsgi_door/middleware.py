@@ -321,9 +321,10 @@ class WsgiLocalGroups:
 		self.groups = groups
 	def __call__(self, environ, start_response):
 		session = environ[cookie_name]
-		key = "{provider}:{username}".format_map(session)
-		for name, values in self.groups:
-			if key in values:
-				session["groups"].append(name)		
+		if "provider" in session and "username" in session:
+			key = "{provider}:{username}".format_map(session)
+			for name, values in self.groups:
+				if key in values:
+					session["groups"].append(name)		
 		return self.wsgi_app(environ, start_response)
 
