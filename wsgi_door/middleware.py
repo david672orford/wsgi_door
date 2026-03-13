@@ -265,7 +265,7 @@ class WsgiDoorFilter(object):
 		self.denied_path = denied_path
 		self.protected_paths = protected_paths
 		self.protected_path_exceptions = protected_path_exceptions
-		self.allowed_groups = set(allowed_groups) if allowed_groups else None
+		self.allowed_groups = set(allowed_groups) if allowed_groups is not None else None
 
 	# Handle HTTP requests
 	def __call__(self, environ, start_response):
