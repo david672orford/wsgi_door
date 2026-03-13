@@ -250,6 +250,7 @@ class AuthProviderOAuth2Base(object):
 			name = None,
 			email = None,
 			picture = None,
+			groups = None,
 			)
 
 # https://console.developers.google.com/
@@ -266,6 +267,7 @@ class AuthProviderGoogle(AuthProviderOAuth2Base):
 			name = profile["name"],
 			email = id_token["email"],
 			picture = profile["picture"],
+			groups = None,
 			)
 
 # https://developers.facebook.com
@@ -300,7 +302,7 @@ class AuthProviderFacebook(AuthProviderOAuth2Base):
 #			groups = None,
 #			)
 
-# https://github.com/settings/apps
+# https://github.com/settings/developers
 class AuthProviderGithub(AuthProviderOAuth2Base):
 	authorize_url = "https://github.com/login/oauth/authorize"
 	access_token_url = "https://github.com/login/oauth/access_token"
@@ -392,6 +394,7 @@ class AuthProviderLinkedin(AuthProviderOAuth2Base):
 			name = "%s %s" % (profile["localizedFirstName"], profile["localizedLastName"]),
 			email = None,
 			picture = None,
+			groups = None,
 			)
 
 # https://developers.pinterest.com/apps/
