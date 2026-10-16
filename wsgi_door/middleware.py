@@ -14,7 +14,7 @@ from werkzeug.utils import redirect
 
 logger = logging.getLogger(__name__)
 
-class WsgiDoorSession(UserDict):
+class WsgiDoorSession(dict):
 	"""Object representing the login session cookie"""
 	cookie_name = "wsgi_door"
 	session_lifetime = 86400
@@ -29,9 +29,6 @@ class WsgiDoorSession(UserDict):
 				self.update(data)
 			except BadData:
 				pass
-
-	def to_dict(self):
-		return self.data
 
 	def save_cookie(self, response, secure=False):
 		cookie = self.serializer.dumps(dict(self))
