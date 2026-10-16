@@ -86,6 +86,13 @@ class WsgiDoorAuth:
 	def error_url(self, request, provider_name, **kwargs):
 		return f"{request.scheme}://{request.host}/auth/error/{provider_name}?{urlencode(kwargs)}"
 
+	# Throw away the response from the wrapped app's login and logout hooks
+	def consume_response(self, app_iter):
+		for data in app_iter:
+			pass
+		if hasattr(app_iter, "close"):
+			app_iter.close()
+
 	# Handle an HTTP requests
 	# We peel off requests to authentication pages and pass other requests
 	# through to the wrapped WSGI application.
@@ -178,7 +185,7 @@ class WsgiDoorAuth:
 
 			# The page which the user originally tried to access should be in the
 			# signed session cookie. Get it out, then clear the cookie and store
-			# the profile in it.
+			# the user's profile in it.
 			next_url = session.pop("next", "/auth/status")
 			session.clear()
 			session["provider"] = provider_name
@@ -192,7 +199,7 @@ class WsgiDoorAuth:
 			session.access_token = access_token
 			session.raw_profile = raw_profile
 			request.environ["wsgi_door"] = session
-			self._consume_response(self.wsgi_app(request.environ, lambda status, headers: None))
+			self.consume_response(self.wsgi_app(request.environ, lambda status, headers: None))
 
 			# Now that the user is logged in, redirect back to the original page.
 			return redirect(next_url)
@@ -262,15 +269,9 @@ class WsgiDoorAuth:
 			for name, value in headers:
 				if name == "Set-Cookie":
 					response.headers.add(name, value)
-		self._consume_response(self.wsgi_app(request.environ, start_response))
+		self.consume_response(self.wsgi_app(request.environ, start_response))
 
 		return response
-
-	def _consume_response(self, app_iter):
-		for data in app_iter:
-			pass
-		if hasattr(app_iter, "close"):
-			app_iter.close()
 
 class WsgiDoorFilter:
 	"""This WSGI middleware requires the user to be authenticated whenever he
