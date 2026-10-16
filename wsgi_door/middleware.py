@@ -157,7 +157,7 @@ class WsgiDoorAuth:
 			if not WsgiDoorSession.cookie_name in request.cookies:
 				return redirect(self.error_url(request, provider_name, error="no_cookie", error_description="Your web browser failed to save the login cookie."))
 
-			# Get the access token
+			# Get the access token by sending a query to the IDP
 			callback_url = self.callback_url(request, provider_name)
 			access_token = provider.get_access_token(request, session, callback_url)
 
