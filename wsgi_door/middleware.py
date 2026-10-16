@@ -30,6 +30,9 @@ class WsgiDoorSession(UserDict):
 			except BadData:
 				pass
 
+	def to_dict(self):
+		return self.data
+
 	def save_cookie(self, response, secure=False):
 		cookie = self.serializer.dumps(dict(self))
 		response.set_cookie(
@@ -186,18 +189,13 @@ class WsgiDoorAuth:
 
 			# Piggyback various things onto the session cookie object and call through
 			# to the wrapped WSGI app. That way it can handle the same path as a login
-			# hook. We throw away the result, so it it does not handle the path, that is
-			# fine too.
+			# hook. We throw away the result, so it it does not handle the path, that
+			# is fine too.
 			session.provider = provider
 			session.access_token = access_token
 			session.raw_profile = raw_profile
 			request.environ["wsgi_door"] = session
-
-			app_iter = self.wsgi_app(request.environ, lambda status, headers: None)
-			for data in app_iter:
-				pass
-			if hasattr(app_iter, "close"):
-				app_iter.close()
+			self._consume_response(self.wsgi_app(request.environ, lambda status, headers: None))
 
 			# Now that the user is logged in, redirect back to the original page.
 			return redirect(next_url)
@@ -256,21 +254,26 @@ class WsgiDoorAuth:
 					logged_out_url=f"{request.scheme}://{request.host}{next_url}"
 					))
 
-		# Otherwise redirect directly the the next URL.
+		# Otherwise redirect directly to the next URL.
 		if response is None:
 			response = redirect(next_url)
 
-		# Forward the request to the underlying WSGI app so it can clean
-		# up its session, if it has one. Discard everything except the
-		# cookies it sets.
+		# Forward the request to the underlying WSGI app so it can clean up its
+		# session, if it has one. Discard everything except the cookies it sets.
 		request.environ["wsgi_door"] = session
 		def start_response(status, headers):
 			for name, value in headers:
 				if name == "Set-Cookie":
 					response.headers.add(name, value)
-		self.wsgi_app(request.environ, start_response)
+		self._consume_response(self.wsgi_app(request.environ, start_response))
 
 		return response
+
+	def _consume_response(self, app_iter):
+		for data in app_iter:
+			pass
+		if hasattr(app_iter, "close"):
+			app_iter.close()
 
 class WsgiDoorFilter:
 	"""This WSGI middleware requires the user to be authenticated whenever he
