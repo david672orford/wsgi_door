@@ -17,79 +17,6 @@ from .version import __version__
 
 logger = logging.getLogger(__name__)
 
-# Base class for providers which still use OAuth version 1
-# (The one we know of is Twitter. As of January 2022 it appears they have
-# implemented OAuth2, so we should probably drop this. See:
-# https://developer.twitter.com/en/docs/authentication/oauth-2-0/authorization-code
-# .)
-# We use Oauthlib to sign the requests.
-# https://oauth.net/core/1.0a/
-#class AuthProviderOAuth1Base(object):
-#	request_token_url = None
-#	authorize_url = None
-#	access_token_url = None
-#	logout_url = None
-#
-#	def __init__(self, config):
-#		self.client_id = config['client_id']
-#		self.client_secret = config['client_secret']
-#
-#	def make_authorize_url(self, session, redirect_uri, extra_args):
-#		import oauthlib.oauth1
-#		client = oauthlib.oauth1.Client(
-#			self.client_id,
-#			client_secret = self.client_secret,
-#			callback_uri = redirect_uri,
-#			)
-#		uri, headers, body = client.sign(self.request_token_url, http_method="POST")
-#		try:
-#			response = urlopen(Request(uri, headers=headers), data=b"")
-#		except HTTPError as e:
-#			return None
-#		response_dict = dict(parse_qsl(response.read().decode("utf-8")))
-#		session['oauth_token'] = response_dict.get('oauth_token')
-#		session['oauth_token_secret'] = response_dict.get('oauth_token_secret')
-#		# FIXME: extra_args ignored
-#		return "%s?%s" % (self.authorize_url, urlencode(dict(oauth_token=response_dict.get('oauth_token'))))
-#
-#	def get_access_token(self, request, session, redirect_uri):
-#		import oauthlib.oauth1
-#		if not 'oauth_token' in session:
-#			return dict(error="spurious_response", error_description="Browser was not expected to visit the redirect_uri.")
-#		if request.args.get('oauth_token') != session['oauth_token']:
-#			return dict(error="incorrect_state", error_description="The oauth_token value is not correct.")
-#		client = oauthlib.oauth1.Client(
-#			self.client_id,
-#			client_secret = self.client_secret,
-#			resource_owner_key = session.pop('oauth_token'),
-#			resource_owner_secret = session.pop('oauth_token_secret'),
-#			verifier = request.args.get('oauth_verifier'),
-#			)
-#		uri, headers, body = client.sign(self.access_token_url, http_method="POST")
-#		try:
-#			response = urlopen(Request(uri, headers=headers), data=b"")
-#		except HTTPError as e:
-#			return dict(error="bad_response", error_description="HTTP request failed: %s %s" % (e.code, e.reason))
-#		return dict(parse_qsl(response.read().decode("utf-8")))
-#
-#	def get_profile(self, access_token):
-#		import oauthlib.oauth1
-#		if self.profile_url is not None:
-#			client = oauthlib.oauth1.Client(
-#				self.client_id,
-#				client_secret = self.client_secret,
-#				resource_owner_key = access_token['oauth_token'],
-#				resource_owner_secret = access_token['oauth_token_secret'],
-#				)
-#
-#			# FIXME: this is unsafe
-#			uri = self.profile_url.format(**access_token)
-#
-#			uri, headers, body = client.sign(uri, http_method="GET")
-#			response = urlopen(Request(uri, headers=headers))
-#			return json.load(response)
-#		return None
-
 # Base class for providers which implement OAuth version 2
 # https://oauth.net/2/
 class AuthProviderOAuth2Base(object):
@@ -100,30 +27,30 @@ class AuthProviderOAuth2Base(object):
 	default_scope = None
 	authorize_args = {}                                                                    
 	access_token_args = {}                                                                 
-	user_agent = 'WSGI-Door/' + __version__
+	user_agent = "WSGI-Door/" + __version__
 
 	def __init__(self, config):
 		self.config = config
-		self.client_id = config['client_id']
-		self.client_secret = config['client_secret']
-		self.scope = config.get('scope', self.default_scope)
-		self.urlopener = build_opener(HTTPSHandler(context=ssl.create_default_context(), debuglevel=self.config.get('debuglevel',0)))
+		self.client_id = config["client_id"]
+		self.client_secret = config["client_secret"]
+		self.scope = config.get("scope", self.default_scope)
+		self.urlopener = build_opener(HTTPSHandler(context=ssl.create_default_context(), debuglevel=self.config.get("debuglevel",0)))
 
 	# Build the URL to which the user's browser should be redirected to reach
 	# the authentication provider's login page.
 	def make_authorize_url(self, session, redirect_uri, extra_args):
-		state = session['state'] = token_hex(8)
+		state = session["state"] = token_hex(8)
 		query = dict(
 			client_id = self.client_id,
 			redirect_uri = redirect_uri,
-			response_type = 'code',
+			response_type = "code",
 			state = state,
 			)
 		if self.scope is not None:
 			query["scope"] = self.scope
 		query.update(self.authorize_args)
 		query.update(extra_args)			# from /auth/login query string
-		return '{authorize_url}?{query}'.format(
+		return "{authorize_url}?{query}".format(
 			authorize_url=self.authorize_url.format_map(self.config),
 			query=urlencode(query)
 			)
@@ -133,9 +60,9 @@ class AuthProviderOAuth2Base(object):
 	# Along with the access token we may receive other information such as
 	# an OpenID Connect assertion (id_token) encoded in JWT format.
 	def get_access_token(self, request, session, redirect_uri):
-		if 'error' in request.args:
-			return dict(error=request.args.get('error'), error_description=request.args.get('error_description'))
-		if not 'state' in session:
+		if "error" in request.args:
+			return dict(error=request.args.get("error"), error_description=request.args.get("error_description"))
+		if not "state" in session:
 			return dict(error="spurious_response", error_description="Browser was not expected to visit the redirect_uri.")
 		if request.args.get('state') != session['state']:
 			return dict(error="incorrect_state", error_description="The state value is not correct.")
@@ -217,7 +144,8 @@ class AuthProviderOAuth2Base(object):
 				)
 			)
 		content_type = response.info().get_content_type()
-		assert content_type == "application/json", content_type
+		if content_type != "application/json":
+			raise ValueError(f"{content_type} when application/json expected")
 
 		# Another Stackexchange bug (IDP uses gzip without permission)
 		if response.getheader("Content-Encoding","") == "gzip":
@@ -306,14 +234,14 @@ class AuthProviderFacebook(AuthProviderOAuth2Base):
 class AuthProviderGithub(AuthProviderOAuth2Base):
 	authorize_url = "https://github.com/login/oauth/authorize"
 	access_token_url = "https://github.com/login/oauth/access_token"
-	default_scope = "openid email"
+	default_scope = None
 	profile_url = "https://api.github.com/user"
 	def normalize_profile(self, access_token, profile):
 		return dict(
 			id = profile["login"],
 			username = profile["login"],
 			name = profile["name"],
-			email = profile["email"],		# may be None
+			email = None,		# we haven't requested scope user:email
 			picture = profile["avatar_url"],
 			groups = [],
 			)
@@ -336,7 +264,7 @@ class AuthProviderAzure(AuthProviderOAuth2Base):
 	default_scope = "openid user.read Directory.Read.All"
 	access_token_url = "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"
 	profile_url = "https://graph.microsoft.com/v1.0/me"
-	logout_url = "https://login.microsoftonline.com/{client_id}/oauth2/logout?post_logout_redirect_uri={logged_out_url}"
+	logout_url = "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/logout?post_logout_redirect_uri={logged_out_url}"
 
 	def normalize_profile(self, access_token, profile):
 		return dict(
@@ -362,11 +290,11 @@ class AuthProviderAzure(AuthProviderOAuth2Base):
 
 	def get_profile_picture(self, access_token):
 		request = Request("https://graph.microsoft.com/v1.0/me/photo/$value",
-	           	headers={
-					"Authorization": "Bearer " + access_token["access_token"],
-					"Accept":"image/jpeg",
-					"User-Agent":self.user_agent,
-					}
+			headers={
+				"Authorization": "Bearer " + access_token["access_token"],
+				"Accept":"image/jpeg",
+				"User-Agent":self.user_agent,
+				}
 			)
 		try:
 			response = self.urlopener.open(request)
@@ -377,7 +305,8 @@ class AuthProviderAzure(AuthProviderOAuth2Base):
 			return None
 			
 		content_type = response.info().get_content_type()
-		assert content_type == "image/jpeg" or content_type == "image/pjpeg", content_type
+		if content_type not in ("image/jpeg", "image/pjpeg"):
+			raise ValueError(f"Unexpected profile picture type: {content_type}")
 		return response.read()
 
 # https://www.linkedin.com/developers/apps/
@@ -443,6 +372,7 @@ class AuthProviderStackexchange(AuthProviderOAuth2Base):
 			id = str(profile["user_id"]),
 			username = profile["display_name"],
 			name = None,
+			email = None,
 			picture = profile["profile_image"],
 			groups = [],
 			)

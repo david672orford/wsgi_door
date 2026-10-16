@@ -1,32 +1,55 @@
+from collections import UserDict
+import json
+import logging
 import os
+from urllib.parse import urlencode, urlparse
+
+from jinja2 import Environment, FileSystemLoader
+from itsdangerous.url_safe import URLSafeTimedSerializer
+from itsdangerous.exc import BadData
 from werkzeug.wrappers import Request, Response
 from werkzeug.routing import Map, Rule, RequestRedirect
 from werkzeug.exceptions import NotFound
 from werkzeug.utils import redirect
-try:
-	from werkzeug.contrib.securecookie import SecureCookie
-except ImportError:
-	from secure_cookie.cookie import SecureCookie
-from jinja2 import Environment, FileSystemLoader
-import json
-from urllib.parse import urlencode, urlparse
-import logging
-
-# Name of our session cookie
-cookie_name = "wsgi_door"
 
 logger = logging.getLogger(__name__)
 
-class JSONSecureCookie(SecureCookie):
+class WsgiDoorSession(UserDict):
 	"""Object representing the login session cookie"""
-	serialization_method = json
-	def set_next_url(self, response, next_url, secure=True):
-		"""Add the URL to redirect to after login to the session and set the session
-		cookie in the response object provided"""
-		self["next"] = next_url
-		self.save_cookie(response, cookie_name, httponly=True, secure=secure)
+	cookie_name = "wsgi_door"
+	session_lifetime = 86400
 
-class WsgiDoorAuth(object):
+	def __init__(self, request, secret_key):
+		super().__init__()
+		cookie = request.cookies.get(self.cookie_name)
+		self.serializer = URLSafeTimedSerializer(secret_key)
+		if cookie is not None:
+			try:
+				data = self.serializer.loads(cookie, max_age=self.session_lifetime)
+				self.update(data)
+			except BadData:
+				pass
+
+	def save_cookie(self, response, secure=False):
+		cookie = self.serializer.dumps(dict(self))
+		response.set_cookie(
+			self.cookie_name,
+			cookie,
+			httponly = True,
+			secure = secure,
+			max_age = self.session_lifetime,
+			samesite = "Lax",
+			)
+
+	def set_next_url(self, response, next_url, secure=True):
+		"""Save the URL to redirect to after login in the session cookie"""
+		self["next"] = next_url
+		self.save_cookie(response, secure=secure)
+
+class WsgiAuthProviderNotFound(NotFound):
+	pass
+
+class WsgiDoorAuth:
 	"""WSGI middleware which inserts authentication using the specified providers"""
 
 	def __init__(self, app, auth_providers, secret, templates=None, stylesheet_url=None):
@@ -45,7 +68,7 @@ class WsgiDoorAuth(object):
 			Rule("/auth/logout", endpoint="on_logout"),
 			])
 
-		template_path = os.path.join(os.path.dirname(__file__), "templates")
+		template_path = [os.path.join(os.path.dirname(__file__), "templates")]
 		if templates:
 			template_path.insert(0, templates)
 		self.jinja_env = Environment(loader=FileSystemLoader(template_path), autoescape=True)
@@ -57,39 +80,29 @@ class WsgiDoorAuth(object):
 
 	# Generate the URL at which we wish to receive the OAuth2 response
 	def callback_url(self, request, provider_name):
-		return "{scheme}://{host}/auth/authorized/{provider_name}".format(
-			scheme = request.scheme,
-			host = request.host,
-			provider_name = provider_name,
-			)
+		return f"{request.scheme}://{request.host}/auth/authorized/{provider_name}"
 
 	# Generate a URL for the error page
 	def error_url(self, request, provider_name, **kwargs):
-		return "{scheme}://{host}/auth/error/{provider_name}?{query}".format(
-			scheme = request.scheme,
-			host = request.host,
-			provider_name = provider_name,
-			query = urlencode(kwargs),
-			)
+		return f"{request.scheme}://{request.host}/auth/error/{provider_name}?{urlencode(kwargs)}"
 
 	# Handle an HTTP requests
 	# We peel off requests to authentication pages and pass other requests
 	# through to the wrapped WSGI application.
 	def __call__(self, environ, start_response):
 		request = Request(environ)
-		session = JSONSecureCookie.load_cookie(request, cookie_name, self.secret)
+		session = WsgiDoorSession(request, self.secret)
 
 		# Try to dispatch to one of our handler functions
 		adapter = self.url_map.bind_to_environ(request.environ)
-		response = None
 		try:
 			try:
 				endpoint, values = adapter.match()
 				response = getattr(self, endpoint)(request, session, **values)
-			except RequestRedirect as e:
-				response = e
+			except (RequestRedirect, WsgiAuthProviderNotFound) as e:
+				response = e.get_response()
 			localhost = request.host.split(":")[0] == "localhost"
-			session.save_cookie(response, key=cookie_name, httponly=True, secure=(not localhost))
+			session.save_cookie(response, secure=(not localhost))
 			return response(environ, start_response)
 		except NotFound:
 			pass
@@ -108,7 +121,7 @@ class WsgiDoorAuth(object):
 
 		# If there is only one provider configured, don't bother with the provider selection page.
 		if len(self.auth_providers) == 1:
-			return self.on_login(request, session, list(self.auth_providers.keys())[0])
+			return self.on_login(request, session, next(iter(self.auth_providers.keys())))
 		return self.render_template("login.html", providers=self.auth_providers.keys(), stylesheet_url=self.stylesheet_url)
 
 	# User has asked to log in using one of the authentication providers offered.
@@ -121,7 +134,7 @@ class WsgiDoorAuth(object):
 			if authorize_url is None:
 				authorize_url = self.error_url(request, provider_name, error="no_authorize_url", error_description="Failed to make the authorization URL.")
 			return redirect(authorize_url)
-		raise NotFound()
+		raise WsgiAuthProviderNotFound()
 
 	# Browser has returned from the provider's login page. The query string
 	# should now contain an authorization code which we will exchange for an
@@ -134,7 +147,7 @@ class WsgiDoorAuth(object):
 			# There is no reason for the browser to hit this URL without our cookie.
 			# If it is missing, say so now so as not to produce a confusing error
 			# message in provider.get_access_token() when it can't find the state.
-			if not cookie_name in request.cookies:
+			if not WsgiDoorSession.cookie_name in request.cookies:
 				return redirect(self.error_url(request, provider_name, error="no_cookie", error_description="Your web browser failed to save the login cookie."))
 
 			# Get the access token
@@ -149,10 +162,10 @@ class WsgiDoorAuth(object):
 			try:
 				raw_profile = provider.get_profile(access_token)
 			except Exception as e:
-				logger.error("Profile fetch failed: %s" % str(e))
+				logger.error("Profile fetch failed: %s", e)
 				return redirect(self.error_url(request, provider_name, error="profile_fetch_failed", error_description=str(e)))
 
-			logger.debug("raw profile: %s" % json.dumps(raw_profile, indent=4, sort_keys=True))
+			logger.debug("raw profile: %s", json.dumps(raw_profile, indent=4, sort_keys=True))
 
 			# Every provider has its own format for the user profile. Call a provider-
 			# specific function to extract what we need to create a normalized profile
@@ -160,7 +173,7 @@ class WsgiDoorAuth(object):
 			try:
 				profile = provider.normalize_profile(access_token, raw_profile)
 			except Exception as e:
-				logger.error("Normalization failed: %s" % str(e))
+				logger.error("Normalization failed: %s", e)
 				return redirect(self.error_url(request, provider_name, error="profile_fetch_failed", error_description="normalization failed"))
 
 			# The page which the user originally tried to access should be in the
@@ -171,19 +184,26 @@ class WsgiDoorAuth(object):
 			session["provider"] = provider_name
 			session.update(profile)
 
-			# Piggyback various things onto the session cookie object and
-			# call the login hook. Ignore the result code.
+			# Piggyback various things onto the session cookie object and call through
+			# to the wrapped WSGI app. That way it can handle the same path as a login
+			# hook. We throw away the result, so it it does not handle the path, that is
+			# fine too.
 			session.provider = provider
 			session.access_token = access_token
 			session.raw_profile = raw_profile
 			request.environ["wsgi_door"] = session
-			self.wsgi_app(request.environ, lambda status, headers: None)
+
+			app_iter = self.wsgi_app(request.environ, lambda status, headers: None)
+			for data in app_iter:
+				pass
+			if hasattr(app_iter, "close"):
+				app_iter.close()
 
 			# Now that the user is logged in, redirect back to the original page.
 			return redirect(next_url)
 
 		# URL does not match a configured provider
-		raise NotFound()
+		raise WsgiAuthProviderNotFound()
 
 	# Page which displays the status of the user's login session.
 	def on_status(self, request, session):
@@ -223,7 +243,7 @@ class WsgiDoorAuth(object):
 			next_url = urlparse(request.args["next"]).path
 		else:
 			next_url = "/"
-		
+
 		# If the user is logged in and the identity provider has a logout URL,
 		# redirect it first so that the provider can destroy its session.
 		# We will ask the provider to redirect to the next_url.
@@ -233,7 +253,7 @@ class WsgiDoorAuth(object):
 			if provider is not None and provider.logout_url is not None:
 				response = redirect(provider.logout_url.format(
 					client_id=provider.client_id,
-					logged_out_url="{scheme}://{host}{next_url}".format(scheme=request.scheme, host=request.host, next_url=next_url)
+					logged_out_url=f"{request.scheme}://{request.host}{next_url}"
 					))
 
 		# Otherwise redirect directly the the next URL.
@@ -252,7 +272,7 @@ class WsgiDoorAuth(object):
 
 		return response
 
-class WsgiDoorFilter(object):
+class WsgiDoorFilter:
 	"""This WSGI middleware requires the user to be authenticated whenever he
 	tries to load one of the listed protect paths. It also sets
 	AUTH_TYPE and REMOTE_USER in the WSGI environment. Note that since
@@ -269,13 +289,13 @@ class WsgiDoorFilter(object):
 
 	# Handle HTTP requests
 	def __call__(self, environ, start_response):
-		session = environ[cookie_name]
+		session = environ["wsgi_door"]
 		request = Request(environ)
 		if self.path_is_protected(request.path):
 			localhost = request.host.split(":")[0] == "localhost"
 			# Protected paths may only be accessed over HTTPS
 			if request.scheme != "https" and not localhost:
-				response = redirect("https://{host}{path}".format(host=request.host, path=request.path))
+				response = redirect(f"https://{request.host}{request.path}")
 				return response(environ, start_response)
 			# If user is not logged in,
 			if not "provider" in session:
@@ -320,11 +340,12 @@ class WsgiLocalGroups:
 		self.wsgi_app = app
 		self.groups = groups
 	def __call__(self, environ, start_response):
-		session = environ[cookie_name]
+		session = environ["wsgi_door"]
 		if "provider" in session and "username" in session:
 			key = "{provider}:{username}".format_map(session)
+			if "groups" not in session:
+				session["groups"] = []
 			for name, values in self.groups.items():
 				if key in values:
-					session["groups"].append(name)		
+					session["groups"].append(name)
 		return self.wsgi_app(environ, start_response)
-

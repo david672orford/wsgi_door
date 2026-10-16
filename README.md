@@ -104,3 +104,7 @@ There is an example in the examples/flask\_login directory.
 * In version 0.21 http://localhost URLs are no longer redirected to HTTPS. Cookies
   return to localhost are no longer marked HTTPS-only. This is to support local apps.
 
+### Version 0.22
+
+* Replaced SecureCookie with ItsDangerous
+
