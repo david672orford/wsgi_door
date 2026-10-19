@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 class AuthProviderOAuth2Base(object):
 	authorize_url = None
 	access_token_url = None
-	profile_url = None
 	logout_url = None
+	profile_url = None
 	default_scope = None
 	authorize_args = {}                                                                    
 	access_token_args = {}                                                                 
@@ -64,9 +64,9 @@ class AuthProviderOAuth2Base(object):
 			return dict(error=request.args.get("error"), error_description=request.args.get("error_description"))
 		if not "state" in session:
 			return dict(error="spurious_response", error_description="Browser was not expected to visit the redirect_uri.")
-		if request.args.get('state') != session['state']:
+		if request.args.get("state") != session["state"]:
 			return dict(error="incorrect_state", error_description="The state value is not correct.")
-		del session['state']
+		del session["state"]
 
 		# Build and send the access token request
 		query = dict(
@@ -263,8 +263,8 @@ class AuthProviderAzure(AuthProviderOAuth2Base):
 	authorize_url = "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize"
 	default_scope = "openid user.read Directory.Read.All"
 	access_token_url = "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"
+	logout_url = "https://login.microsoftonline.com/{client_id}/oauth2/logout?post_logout_redirect_uri={logged_out_url}"
 	profile_url = "https://graph.microsoft.com/v1.0/me"
-	logout_url = "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/logout?post_logout_redirect_uri={logged_out_url}"
 
 	def normalize_profile(self, access_token, profile):
 		return dict(

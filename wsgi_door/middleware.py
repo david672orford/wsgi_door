@@ -254,10 +254,12 @@ class WsgiDoorAuth:
 		if provider_name is not None:
 			provider = self.auth_providers.get(provider_name)
 			if provider is not None and provider.logout_url is not None:
-				response = redirect(provider.logout_url.format(
-					client_id=provider.client_id,
-					logged_out_url=f"{request.scheme}://{request.host}{next_url}"
-					))
+				response = redirect(
+					provider.logout_url.format(
+						client_id = provider.client_id,
+						logged_out_url = f"{request.scheme}://{request.host}{next_url}"
+						)
+					)
 
 		# Otherwise redirect directly to the next URL.
 		if response is None:
