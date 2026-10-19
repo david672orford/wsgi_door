@@ -107,7 +107,8 @@ class WsgiDoorAuth:
 				endpoint, values = adapter.match()
 				response = getattr(self, endpoint)(request, session, **values)
 			except (RequestRedirect, WsgiAuthProviderNotFound) as e:
-				response = e.get_response()
+				response = e.get_response()	# bare RequestRedirect doesn't have .set_cookie()
+			assert isinstance(response, Response)
 			localhost = request.host.split(":")[0] == "localhost"
 			session.save_cookie(response, secure=(not localhost))
 			return response(environ, start_response)
